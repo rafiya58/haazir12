@@ -77,7 +77,7 @@ const VendorDashboard = () => {
     else toast.success(`Price updated`);
   };
 
-  const updateOrderStatus = async (id: string, status: string) => {
+  const updateOrderStatus = async (id: string, status: "pending" | "preparing" | "ready" | "completed" | "cancelled") => {
     const { error } = await supabase.from("orders").update({ status }).eq("id", id);
     if (error) toast.error(error.message);
     else toast.success(`Order marked ${status}`);
