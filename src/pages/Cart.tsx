@@ -1,14 +1,30 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { useCart } from "@/store/cart";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Minus, Plus, Trash2, Loader2, ShoppingBag } from "lucide-react";
+import { Minus, Plus, Trash2, Loader2, ShoppingBag, Clock } from "lucide-react";
 import { toast } from "sonner";
+
+const SERVICE_FEE = 25;
+const MIN_LEAD_MIN = 15;
+const SLOT_INTERVAL_MIN = 5;
+const MAX_LOOKAHEAD_MIN = 120; // 2 hours of slots
+
+// Round Date up to next interval boundary
+const ceilToInterval = (d: Date, intervalMin: number) => {
+  const ms = intervalMin * 60 * 1000;
+  return new Date(Math.ceil(d.getTime() / ms) * ms);
+};
+
+const formatSlot = (d: Date) =>
+  d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -16,13 +32,44 @@ const Cart = () => {
   const { user } = useAuth();
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pickupIso, setPickupIso] = useState<string>("");
+  const [now, setNow] = useState(() => new Date());
 
-  const total = cart.total();
+  // Tick every 30s so slots roll forward in real time
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const slots = useMemo(() => {
+    const earliest = ceilToInterval(new Date(now.getTime() + MIN_LEAD_MIN * 60_000), SLOT_INTERVAL_MIN);
+    const out: Date[] = [];
+    for (let i = 0; i < MAX_LOOKAHEAD_MIN / SLOT_INTERVAL_MIN; i++) {
+      out.push(new Date(earliest.getTime() + i * SLOT_INTERVAL_MIN * 60_000));
+    }
+    return out;
+  }, [now]);
+
+  // Auto-select first slot, and re-validate if current selection drifts past min lead
+  useEffect(() => {
+    if (slots.length === 0) return;
+    const earliestMs = slots[0].getTime();
+    if (!pickupIso || new Date(pickupIso).getTime() < earliestMs) {
+      setPickupIso(slots[0].toISOString());
+    }
+  }, [slots, pickupIso]);
+
+  const subtotal = cart.total();
+  const total = subtotal + (cart.items.length > 0 ? SERVICE_FEE : 0);
   const vendorId = cart.items[0]?.restaurantId;
   const vendorName = cart.items[0]?.restaurantName;
 
   const placeOrder = async () => {
     if (!user || !vendorId || cart.items.length === 0) return;
+    if (!pickupIso) {
+      toast.error("Please pick a pickup time");
+      return;
+    }
     setSubmitting(true);
 
     const { data: order, error: orderErr } = await supabase
@@ -31,6 +78,8 @@ const Cart = () => {
         student_id: user.id,
         restaurant_id: vendorId,
         total,
+        service_fee: SERVICE_FEE,
+        pickup_time: pickupIso,
         notes: notes.trim() || null,
       })
       .select()
@@ -110,6 +159,28 @@ const Cart = () => {
           ))}
         </Card>
 
+        <Card className="mt-4 p-4">
+          <Label htmlFor="pickup-time" className="flex items-center gap-1.5 text-sm font-semibold text-navy">
+            <Clock className="h-4 w-4 text-forest" />
+            Pickup time
+          </Label>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Earliest slot is {MIN_LEAD_MIN} minutes from now. Slots refresh automatically.
+          </p>
+          <Select value={pickupIso} onValueChange={setPickupIso}>
+            <SelectTrigger id="pickup-time" className="mt-3">
+              <SelectValue placeholder="Select pickup time" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {slots.map((s) => (
+                <SelectItem key={s.toISOString()} value={s.toISOString()}>
+                  {formatSlot(s)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Card>
+
         <div className="mt-4">
           <Textarea
             value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 200))}
@@ -118,10 +189,20 @@ const Cart = () => {
           />
         </div>
 
-        <div className="mt-6 flex items-center justify-between rounded-xl bg-accent p-4">
-          <span className="text-sm font-medium text-accent-foreground">Total</span>
-          <span className="font-display text-2xl font-bold text-forest-dark">Rs {total.toFixed(0)}</span>
-        </div>
+        <Card className="mt-6 space-y-2 p-4">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span className="font-medium text-navy">Rs {subtotal.toFixed(0)}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Service fee</span>
+            <span className="font-medium text-navy">Rs {SERVICE_FEE.toFixed(0)}</span>
+          </div>
+          <div className="mt-2 flex items-center justify-between border-t pt-3">
+            <span className="text-sm font-semibold text-navy">Total</span>
+            <span className="font-display text-2xl font-bold text-forest-dark">Rs {total.toFixed(0)}</span>
+          </div>
+        </Card>
 
         <Button onClick={placeOrder} disabled={submitting} variant="cta" size="lg" className="mt-4 w-full">
           {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Confirm pre-order"}
