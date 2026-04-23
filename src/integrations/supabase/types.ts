@@ -224,6 +224,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assign_vendor: {
+        Args: { _email: string; _restaurant_slug: string }
+        Returns: undefined
+      }
       get_user_restaurant: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -232,6 +236,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      promote_to_admin: { Args: { _email: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "restaurant" | "student"
