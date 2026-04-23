@@ -106,7 +106,9 @@ export type Database = {
           id: string
           notes: string | null
           pickup_code: string
+          pickup_time: string | null
           restaurant_id: string
+          service_fee: number
           status: Database["public"]["Enums"]["order_status"]
           student_id: string
           total: number
@@ -117,7 +119,9 @@ export type Database = {
           id?: string
           notes?: string | null
           pickup_code?: string
+          pickup_time?: string | null
           restaurant_id: string
+          service_fee?: number
           status?: Database["public"]["Enums"]["order_status"]
           student_id: string
           total: number
@@ -128,7 +132,9 @@ export type Database = {
           id?: string
           notes?: string | null
           pickup_code?: string
+          pickup_time?: string | null
           restaurant_id?: string
+          service_fee?: number
           status?: Database["public"]["Enums"]["order_status"]
           student_id?: string
           total?: number

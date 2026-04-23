@@ -9,7 +9,7 @@ import { CheckCircle2, Clock, ChefHat, Bell, Loader2, ArrowLeft } from "lucide-r
 import { Button } from "@/components/ui/button";
 
 interface Order {
-  id: string; status: string; total: number; pickup_code: string; notes: string | null; created_at: string; restaurant_id: string;
+  id: string; status: string; total: number; pickup_code: string; notes: string | null; created_at: string; restaurant_id: string; pickup_time: string | null; service_fee: number;
 }
 interface OrderItem { id: string; item_name: string; quantity: number; unit_price: number; }
 interface Restaurant { name: string; emoji: string | null; }
@@ -137,13 +137,21 @@ const OrderConfirmation = () => {
           {order.notes && (
             <p className="mt-3 rounded-md bg-muted p-2 text-xs text-muted-foreground">"{order.notes}"</p>
           )}
-          <div className="mt-4 flex justify-between border-t pt-3 font-bold text-navy">
+          {order.service_fee > 0 && (
+            <div className="mt-3 flex justify-between text-xs text-muted-foreground">
+              <span>Service fee</span><span>Rs {Number(order.service_fee).toFixed(0)}</span>
+            </div>
+          )}
+          <div className="mt-2 flex justify-between border-t pt-3 font-bold text-navy">
             <span>Total</span><span>Rs {Number(order.total).toFixed(0)}</span>
           </div>
         </Card>
 
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-          <Clock className="h-3 w-3" /> Estimated pickup in 8–12 minutes
+          <Clock className="h-3 w-3" />
+          {order.pickup_time
+            ? `Pickup at ${new Date(order.pickup_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+            : "Estimated pickup in 8–12 minutes"}
         </p>
       </section>
     </div>

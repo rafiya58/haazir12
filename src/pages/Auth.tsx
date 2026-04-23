@@ -6,14 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Utensils, GraduationCap, Store, Loader2 } from "lucide-react";
+import { Utensils, GraduationCap, Store, Loader2, ShieldCheck } from "lucide-react";
 import { z } from "zod";
 
-const signupSchema = z.object({
+const studentSignupSchema = z.object({
   email: z.string().trim().email("Enter a valid email").max(255).refine(isIBAEmail, {
     message: "Use your @khi.iba.edu.pk or @iba.edu.pk email",
   }),
+  password: z.string().min(8, "Min 8 characters").max(72),
+  fullName: z.string().trim().min(2, "Enter your name").max(80),
+});
+
+const staffSignupSchema = z.object({
+  email: z.string().trim().email("Enter a valid email").max(255),
   password: z.string().min(8, "Min 8 characters").max(72),
   fullName: z.string().trim().min(2, "Enter your name").max(80),
 });
@@ -22,6 +29,8 @@ const loginSchema = z.object({
   email: z.string().trim().email("Enter a valid email").max(255),
   password: z.string().min(1, "Password required").max(72),
 });
+
+type AccountType = "student" | "staff";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -32,6 +41,7 @@ const Auth = () => {
   const [loginPassword, setLoginPassword] = useState("");
 
   // Signup form
+  const [accountType, setAccountType] = useState<AccountType>("student");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,7 +69,8 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = signupSchema.safeParse({ email, password, fullName: name });
+    const schema = accountType === "student" ? studentSignupSchema : staffSignupSchema;
+    const parsed = schema.safeParse({ email, password, fullName: name });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
       return;
@@ -78,7 +89,11 @@ const Auth = () => {
       toast.error(error.message);
       return;
     }
-    toast.success("Account created — you're in!");
+    if (accountType === "staff") {
+      toast.success("Account created — ask the Haazir team to grant your role.");
+    } else {
+      toast.success("Account created — you're in!");
+    }
     navigate("/");
   };
 
@@ -121,26 +136,68 @@ const Auth = () => {
               </form>
             </TabsContent>
 
-            <TabsContent value="signup" className="mt-6">
-              <div className="mb-4 flex items-start gap-3 rounded-lg border border-forest/20 bg-accent p-3 text-xs text-accent-foreground">
-                <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-forest" />
-                <p>Student sign-up is restricted to <span className="font-semibold">@khi.iba.edu.pk</span> or <span className="font-semibold">@iba.edu.pk</span> emails.</p>
-              </div>
+            <TabsContent value="signup" className="mt-6 space-y-4">
+              <RadioGroup
+                value={accountType}
+                onValueChange={(v) => setAccountType(v as AccountType)}
+                className="grid grid-cols-2 gap-2"
+              >
+                <Label
+                  htmlFor="acc-student"
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm transition-colors ${
+                    accountType === "student" ? "border-forest bg-accent" : "border-border"
+                  }`}
+                >
+                  <RadioGroupItem id="acc-student" value="student" className="sr-only" />
+                  <GraduationCap className="h-4 w-4 text-forest" />
+                  <span className="font-medium">Student</span>
+                </Label>
+                <Label
+                  htmlFor="acc-staff"
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm transition-colors ${
+                    accountType === "staff" ? "border-forest bg-accent" : "border-border"
+                  }`}
+                >
+                  <RadioGroupItem id="acc-staff" value="staff" className="sr-only" />
+                  <ShieldCheck className="h-4 w-4 text-forest" />
+                  <span className="font-medium">Vendor / Admin</span>
+                </Label>
+              </RadioGroup>
+
+              {accountType === "student" ? (
+                <div className="flex items-start gap-3 rounded-lg border border-forest/20 bg-accent p-3 text-xs text-accent-foreground">
+                  <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-forest" />
+                  <p>Student sign-up is restricted to <span className="font-semibold">@khi.iba.edu.pk</span> or <span className="font-semibold">@iba.edu.pk</span> emails.</p>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 rounded-lg border border-forest/20 bg-accent p-3 text-xs text-accent-foreground">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-forest" />
+                  <p>Use any email. After signup, the Haazir team will grant you vendor or admin access before you can use the dashboard.</p>
+                </div>
+              )}
+
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="su-name">Full name</Label>
                   <Input id="su-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ali Khan" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="su-email">IBA email</Label>
-                  <Input id="su-email" type="email" autoComplete="email" placeholder="erp-id@khi.iba.edu.pk" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <Label htmlFor="su-email">{accountType === "student" ? "IBA email" : "Email"}</Label>
+                  <Input
+                    id="su-email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder={accountType === "student" ? "erp-id@khi.iba.edu.pk" : "you@example.com"}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="su-pw">Password</Label>
                   <Input id="su-pw" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
                 <Button type="submit" variant="cta" size="lg" className="w-full" disabled={loading}>
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create student account"}
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : accountType === "student" ? "Create student account" : "Create staff account"}
                 </Button>
               </form>
             </TabsContent>
