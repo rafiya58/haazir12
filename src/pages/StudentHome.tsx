@@ -36,11 +36,11 @@ const StudentHome = () => {
       <TopBar />
 
       <section className="bg-gradient-hero text-primary-foreground">
-        <div className="container py-10 sm:py-14">
+        <div className="container pt-14 pb-12 sm:pt-20 sm:pb-16">
           <div className="max-w-2xl animate-fade-in">
             <Badge className="mb-4 border-0 bg-forest text-primary-foreground hover:bg-forest">Skip the line</Badge>
             <h1 className="font-display text-3xl font-bold leading-tight sm:text-5xl">
-              Pre-order. Pickup. <span className="text-forest-light">Eat in 5.</span>
+              Pre-order. Pickup. <span className="text-forest-light">Eat in 10.</span>
             </h1>
             <p className="mt-3 max-w-lg text-sm text-primary-foreground/75 sm:text-base">
               Order ahead from your favourite IBA campus restaurants. Real-time confirmations, no queues.
