@@ -159,7 +159,12 @@ const VendorDashboard = () => {
                           <p className="font-display text-lg font-bold text-navy">#{o.pickup_code}</p>
                           <Badge variant="outline" className="capitalize">{o.status}</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleTimeString()}</p>
+                        <p className="text-xs text-muted-foreground">Ordered {new Date(o.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                        {o.pickup_time && (
+                          <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-forest/10 px-2 py-0.5 text-xs font-semibold text-forest">
+                            <Clock className="h-3 w-3" /> Pickup at {new Date(o.pickup_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        )}
                       </div>
                       <p className="font-bold text-forest">Rs {Number(o.total).toFixed(0)}</p>
                     </div>
