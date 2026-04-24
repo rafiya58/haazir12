@@ -112,8 +112,16 @@ const VendorDashboard = () => {
     );
   }
 
-  const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
-  const past = orders.filter((o) => !ACTIVE_STATUSES.includes(o.status));
+  const active = orders
+    .filter((o) => ACTIVE_STATUSES.includes(o.status))
+    .sort((a, b) => {
+      const ta = a.pickup_time ? new Date(a.pickup_time).getTime() : new Date(a.created_at).getTime();
+      const tb = b.pickup_time ? new Date(b.pickup_time).getTime() : new Date(b.created_at).getTime();
+      return ta - tb;
+    });
+  const past = orders
+    .filter((o) => !ACTIVE_STATUSES.includes(o.status))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <div className="min-h-screen bg-background">
