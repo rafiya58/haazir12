@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck } from "lucide-react";
+import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 interface MenuItem { id: string; name: string; description: string | null; price: number; category: string; is_available: boolean; restaurant_id: string; }
