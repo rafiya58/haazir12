@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck } from "lucide-react";
+import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 interface MenuItem { id: string; name: string; description: string | null; price: number; category: string; is_available: boolean; restaurant_id: string; }
 interface OrderItem { id: string; item_name: string; quantity: number; unit_price: number; }
 interface Order {
   id: string; status: string; total: number; pickup_code: string; notes: string | null; created_at: string;
+  pickup_time: string | null;
   student_id: string;
   order_items: OrderItem[];
   profiles?: { full_name: string | null; email: string } | null;
@@ -36,7 +37,7 @@ const VendorDashboard = () => {
       const [{ data: r }, { data: m }, { data: o }] = await Promise.all([
         supabase.from("restaurants").select("name").eq("id", restaurantId).maybeSingle(),
         supabase.from("menu_items").select("*").eq("restaurant_id", restaurantId).order("category").order("name"),
-        supabase.from("orders").select("*, order_items(*)").eq("restaurant_id", restaurantId).order("created_at", { ascending: false }),
+        supabase.from("orders").select("*, order_items(*)").eq("restaurant_id", restaurantId).order("pickup_time", { ascending: true, nullsFirst: false }),
       ]);
       setRestaurantName(r?.name ?? "Vendor");
       setMenu((m as MenuItem[]) ?? []);
@@ -111,8 +112,16 @@ const VendorDashboard = () => {
     );
   }
 
-  const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
-  const past = orders.filter((o) => !ACTIVE_STATUSES.includes(o.status));
+  const active = orders
+    .filter((o) => ACTIVE_STATUSES.includes(o.status))
+    .sort((a, b) => {
+      const ta = a.pickup_time ? new Date(a.pickup_time).getTime() : new Date(a.created_at).getTime();
+      const tb = b.pickup_time ? new Date(b.pickup_time).getTime() : new Date(b.created_at).getTime();
+      return ta - tb;
+    });
+  const past = orders
+    .filter((o) => !ACTIVE_STATUSES.includes(o.status))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <div className="min-h-screen bg-background">
@@ -158,7 +167,12 @@ const VendorDashboard = () => {
                           <p className="font-display text-lg font-bold text-navy">#{o.pickup_code}</p>
                           <Badge variant="outline" className="capitalize">{o.status}</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleTimeString()}</p>
+                        <p className="text-xs text-muted-foreground">Ordered {new Date(o.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                        {o.pickup_time && (
+                          <p className="mt-1 inline-flex items-center gap-1 rounded-md bg-forest/10 px-2 py-0.5 text-xs font-semibold text-forest">
+                            <Clock className="h-3 w-3" /> Pickup at {new Date(o.pickup_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        )}
                       </div>
                       <p className="font-bold text-forest">Rs {Number(o.total).toFixed(0)}</p>
                     </div>
