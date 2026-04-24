@@ -15,6 +15,7 @@ interface MenuItem { id: string; name: string; description: string | null; price
 interface OrderItem { id: string; item_name: string; quantity: number; unit_price: number; }
 interface Order {
   id: string; status: string; total: number; pickup_code: string; notes: string | null; created_at: string;
+  pickup_time: string | null;
   student_id: string;
   order_items: OrderItem[];
   profiles?: { full_name: string | null; email: string } | null;
