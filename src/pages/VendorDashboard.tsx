@@ -37,7 +37,7 @@ const VendorDashboard = () => {
       const [{ data: r }, { data: m }, { data: o }] = await Promise.all([
         supabase.from("restaurants").select("name").eq("id", restaurantId).maybeSingle(),
         supabase.from("menu_items").select("*").eq("restaurant_id", restaurantId).order("category").order("name"),
-        supabase.from("orders").select("*, order_items(*)").eq("restaurant_id", restaurantId).order("created_at", { ascending: false }),
+        supabase.from("orders").select("*, order_items(*)").eq("restaurant_id", restaurantId).order("pickup_time", { ascending: true, nullsFirst: false }),
       ]);
       setRestaurantName(r?.name ?? "Vendor");
       setMenu((m as MenuItem[]) ?? []);
