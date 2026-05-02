@@ -128,7 +128,13 @@ const RestaurantMenu = () => {
 
       <section className="container space-y-8 py-8">
         {grouped.length === 0 && (
-          <p className="py-10 text-center text-muted-foreground">No menu items yet.</p>
+          <Card className="mx-auto max-w-md p-10 text-center shadow-card">
+            <div className="text-5xl">🚧</div>
+            <h2 className="mt-3 font-display text-xl font-bold text-navy">Coming Soon</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {restaurant.name} is finalising their menu. Check back shortly to start ordering.
+            </p>
+          </Card>
         )}
         {grouped.map(([cat, list]) => (
           <div key={cat}>
