@@ -105,6 +105,7 @@ export type Database = {
           created_at: string
           id: string
           notes: string | null
+          payment_proof_url: string | null
           pickup_code: string
           pickup_time: string | null
           restaurant_id: string
@@ -118,6 +119,7 @@ export type Database = {
           created_at?: string
           id?: string
           notes?: string | null
+          payment_proof_url?: string | null
           pickup_code?: string
           pickup_time?: string | null
           restaurant_id: string
@@ -131,6 +133,7 @@ export type Database = {
           created_at?: string
           id?: string
           notes?: string | null
+          payment_proof_url?: string | null
           pickup_code?: string
           pickup_time?: string | null
           restaurant_id?: string

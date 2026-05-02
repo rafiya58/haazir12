@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck, Clock } from "lucide-react";
+import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck, Clock, Receipt } from "lucide-react";
 import { toast } from "sonner";
 
 interface MenuItem { id: string; name: string; description: string | null; price: number; category: string; is_available: boolean; restaurant_id: string; }
@@ -16,6 +16,7 @@ interface OrderItem { id: string; item_name: string; quantity: number; unit_pric
 interface Order {
   id: string; status: string; total: number; pickup_code: string; notes: string | null; created_at: string;
   pickup_time: string | null;
+  payment_proof_url: string | null;
   student_id: string;
   order_items: OrderItem[];
   profiles?: { full_name: string | null; email: string } | null;
@@ -185,6 +186,19 @@ const VendorDashboard = () => {
                       ))}
                     </ul>
                     {o.notes && <p className="mt-2 rounded-md bg-muted p-2 text-xs italic text-muted-foreground">"{o.notes}"</p>}
+                    {o.payment_proof_url && (
+                      <a
+                        href={o.payment_proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 flex items-center gap-3 rounded-lg border bg-muted/40 p-2 transition-colors hover:bg-muted"
+                      >
+                        <img src={o.payment_proof_url} alt="Payment proof" className="h-14 w-14 rounded-md object-cover" />
+                        <div className="flex flex-1 items-center gap-1.5 text-xs font-semibold text-forest">
+                          <Receipt className="h-3.5 w-3.5" /> View payment receipt
+                        </div>
+                      </a>
+                    )}
                     <div className="mt-4 flex flex-wrap gap-2">
                       {o.status === "pending" && (
                         <Button onClick={() => updateOrderStatus(o.id, "preparing")} variant="cta" size="sm">

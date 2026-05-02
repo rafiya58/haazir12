@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/store/cart";
 import { ArrowLeft, Loader2, Plus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
+import gyroverseLogo from "@/assets/gyroverse-logo.jpeg";
 
 interface Restaurant {
   id: string; name: string; slug: string; emoji: string | null; cuisine: string | null; is_open: boolean;
@@ -115,8 +116,12 @@ const RestaurantMenu = () => {
             <Link to="/" className="gap-1.5"><ArrowLeft className="h-4 w-4" /> All restaurants</Link>
           </Button>
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-navy-dark text-4xl shadow-elevated">
-              {restaurant.emoji}
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-navy-dark text-4xl shadow-elevated">
+              {restaurant.slug === "gyroverse" ? (
+                <img src={gyroverseLogo} alt={restaurant.name} className="h-full w-full object-cover" />
+              ) : (
+                restaurant.emoji
+              )}
             </div>
             <div>
               <h1 className="font-display text-2xl font-bold sm:text-3xl">{restaurant.name}</h1>
@@ -128,7 +133,13 @@ const RestaurantMenu = () => {
 
       <section className="container space-y-8 py-8">
         {grouped.length === 0 && (
-          <p className="py-10 text-center text-muted-foreground">No menu items yet.</p>
+          <Card className="mx-auto max-w-md p-10 text-center shadow-card">
+            <div className="text-5xl">🚧</div>
+            <h2 className="mt-3 font-display text-xl font-bold text-navy">Coming Soon</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {restaurant.name} is finalising their menu. Check back shortly to start ordering.
+            </p>
+          </Card>
         )}
         {grouped.map(([cat, list]) => (
           <div key={cat}>

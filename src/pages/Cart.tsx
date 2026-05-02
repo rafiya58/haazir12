@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,22 +9,26 @@ import { Label } from "@/components/ui/label";
 import { useCart } from "@/store/cart";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Minus, Plus, Trash2, Loader2, ShoppingBag, Clock } from "lucide-react";
+import { Minus, Plus, Trash2, Loader2, ShoppingBag, Clock, Upload, CheckCircle2, Copy } from "lucide-react";
 import { toast } from "sonner";
+import imageCompression from "browser-image-compression";
 
 const SERVICE_FEE = 25;
 const MIN_LEAD_MIN = 15;
 const SLOT_INTERVAL_MIN = 5;
-const MAX_LOOKAHEAD_MIN = 120; // 2 hours of slots
+const MAX_LOOKAHEAD_MIN = 120;
 
-// Round Date up to next interval boundary
+const BANK_DETAILS = {
+  name: "MUHAMMAD RAAHIM SIDDIQUI",
+  bank: "[Insert Bank Name]",
+  account: "01980110880540",
+};
+
 const ceilToInterval = (d: Date, intervalMin: number) => {
   const ms = intervalMin * 60 * 1000;
   return new Date(Math.ceil(d.getTime() / ms) * ms);
 };
-
-const formatSlot = (d: Date) =>
-  d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const formatSlot = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -35,7 +39,13 @@ const Cart = () => {
   const [pickupIso, setPickupIso] = useState<string>("");
   const [now, setNow] = useState(() => new Date());
 
-  // Tick every 30s so slots roll forward in real time
+  // Payment proof state
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
@@ -50,7 +60,6 @@ const Cart = () => {
     return out;
   }, [now]);
 
-  // Auto-select first slot, and re-validate if current selection drifts past min lead
   useEffect(() => {
     if (slots.length === 0) return;
     const earliestMs = slots[0].getTime();
@@ -64,12 +73,53 @@ const Cart = () => {
   const vendorId = cart.items[0]?.restaurantId;
   const vendorName = cart.items[0]?.restaurantName;
 
-  const placeOrder = async () => {
-    if (!user || !vendorId || cart.items.length === 0) return;
-    if (!pickupIso) {
-      toast.error("Please pick a pickup time");
+  const handleProofSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file");
       return;
     }
+    setUploading(true);
+    setProofUrl(null);
+
+    try {
+      const compressed = await imageCompression(file, {
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 1600,
+        useWebWorker: true,
+        fileType: "image/jpeg",
+      });
+
+      const ext = "jpg";
+      const filePath = `${user.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("payment-proofs")
+        .upload(filePath, compressed, { upsert: false, contentType: "image/jpeg" });
+      if (upErr) throw upErr;
+
+      const { data: pub } = supabase.storage.from("payment-proofs").getPublicUrl(filePath);
+      setProofFile(compressed as File);
+      setProofPreview(URL.createObjectURL(compressed));
+      setProofUrl(pub.publicUrl);
+      toast.success("Payment proof uploaded");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const copyAccount = () => {
+    navigator.clipboard.writeText(BANK_DETAILS.account);
+    toast.success("Account number copied");
+  };
+
+  const placeOrder = async () => {
+    if (!user || !vendorId || cart.items.length === 0) return;
+    if (!pickupIso) { toast.error("Please pick a pickup time"); return; }
+    if (!proofUrl) { toast.error("Please upload your payment receipt to confirm"); return; }
     setSubmitting(true);
 
     const { data: order, error: orderErr } = await supabase
@@ -81,6 +131,7 @@ const Cart = () => {
         service_fee: SERVICE_FEE,
         pickup_time: pickupIso,
         notes: notes.trim() || null,
+        payment_proof_url: proofUrl,
       })
       .select()
       .single();
@@ -92,19 +143,13 @@ const Cart = () => {
     }
 
     const itemRows = cart.items.map((i) => ({
-      order_id: order.id,
-      menu_item_id: i.id,
-      item_name: i.name,
-      unit_price: i.price,
-      quantity: i.quantity,
+      order_id: order.id, menu_item_id: i.id, item_name: i.name,
+      unit_price: i.price, quantity: i.quantity,
     }));
     const { error: itemsErr } = await supabase.from("order_items").insert(itemRows);
 
     setSubmitting(false);
-    if (itemsErr) {
-      toast.error(itemsErr.message);
-      return;
-    }
+    if (itemsErr) { toast.error(itemsErr.message); return; }
     cart.clear();
     toast.success("Order placed!");
     navigate(`/order/${order.id}`);
@@ -127,6 +172,8 @@ const Cart = () => {
       </div>
     );
   }
+
+  const canConfirm = !!proofUrl && !!pickupIso && !submitting && !uploading;
 
   return (
     <div className="min-h-screen bg-background">
@@ -204,8 +251,84 @@ const Cart = () => {
           </div>
         </Card>
 
-        <Button onClick={placeOrder} disabled={submitting} variant="cta" size="lg" className="mt-4 w-full">
-          {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Confirm pre-order"}
+        {/* Payment instructions + proof upload */}
+        <Card className="mt-6 border-2 border-forest/30 bg-accent/40 p-4">
+          <p className="text-sm font-semibold text-navy">Payment instructions</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Please transfer <span className="font-bold text-navy">Rs {total.toFixed(0)}</span> to:
+          </p>
+          <div className="mt-3 space-y-1.5 rounded-lg bg-background p-3 text-sm">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Name</span>
+              <span className="text-right font-semibold text-navy">{BANK_DETAILS.name}</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Bank</span>
+              <span className="text-right font-semibold text-navy">{BANK_DETAILS.bank}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Account</span>
+              <button onClick={copyAccount} className="inline-flex items-center gap-1 font-mono text-sm font-bold text-forest hover:underline">
+                {BANK_DETAILS.account} <Copy className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            Upload a screenshot of your payment receipt to confirm your order.
+          </p>
+
+          <div className="mt-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleProofSelect}
+            />
+            {!proofPreview ? (
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                variant="cta"
+                size="lg"
+                className="w-full"
+              >
+                {uploading ? (
+                  <><Loader2 className="h-5 w-5 animate-spin" /> Uploading…</>
+                ) : (
+                  <><Upload className="h-5 w-5" /> Upload payment proof</>
+                )}
+              </Button>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative overflow-hidden rounded-lg border">
+                  <img src={proofPreview} alt="Payment proof" className="max-h-64 w-full object-contain bg-muted" />
+                  {proofUrl && (
+                    <div className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-forest px-2 py-1 text-xs font-semibold text-primary-foreground shadow-elevated">
+                      <CheckCircle2 className="h-3 w-3" /> Uploaded
+                    </div>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                >
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Replace screenshot"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Button onClick={placeOrder} disabled={!canConfirm} variant="cta" size="lg" className="mt-4 w-full">
+          {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> :
+            !proofUrl ? "Upload payment proof to confirm" : "Confirm pre-order"}
         </Button>
       </section>
     </div>
