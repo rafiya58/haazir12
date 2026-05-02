@@ -7,6 +7,7 @@ import { Loader2, TrendingUp, ShoppingBag, DollarSign, Building2 } from "lucide-
 
 interface OrderRow {
   id: string; status: string; total: number; created_at: string; restaurant_id: string;
+  payment_proof_url: string | null;
   restaurants: { name: string; emoji: string | null } | null;
 }
 
@@ -18,7 +19,7 @@ const AdminDashboard = () => {
     const load = async () => {
       const { data } = await supabase
         .from("orders")
-        .select("id,status,total,created_at,restaurant_id,restaurants(name,emoji)")
+        .select("id,status,total,created_at,restaurant_id,payment_proof_url,restaurants(name,emoji)")
         .order("created_at", { ascending: false });
       setOrders((data as unknown as OrderRow[]) ?? []);
       setLoading(false);
@@ -108,13 +109,18 @@ const AdminDashboard = () => {
           <h2 className="mb-4 font-display text-lg font-bold text-navy">Recent activity</h2>
           <ul className="divide-y">
             {orders.slice(0, 15).map((o) => (
-              <li key={o.id} className="flex items-center justify-between py-2 text-sm">
+              <li key={o.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                 <div className="flex items-center gap-2">
                   <span>{o.restaurants?.emoji}</span>
                   <span className="font-medium text-navy">{o.restaurants?.name}</span>
                   <Badge variant="outline" className="capitalize text-[10px]">{o.status}</Badge>
                 </div>
                 <div className="flex items-center gap-3 text-xs">
+                  {o.payment_proof_url && (
+                    <a href={o.payment_proof_url} target="_blank" rel="noopener noreferrer" title="View payment receipt">
+                      <img src={o.payment_proof_url} alt="receipt" className="h-8 w-8 rounded object-cover ring-1 ring-border hover:ring-forest" />
+                    </a>
+                  )}
                   <span className="text-muted-foreground">{new Date(o.created_at).toLocaleTimeString()}</span>
                   <span className="font-bold text-forest">Rs {Number(o.total).toFixed(0)}</span>
                 </div>
