@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/store/cart";
 import { ArrowLeft, Loader2, Plus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
+import gyroverseLogo from "@/assets/gyroverse-logo.jpeg";
 
 interface Restaurant {
   id: string; name: string; slug: string; emoji: string | null; cuisine: string | null; is_open: boolean;
@@ -115,8 +116,12 @@ const RestaurantMenu = () => {
             <Link to="/" className="gap-1.5"><ArrowLeft className="h-4 w-4" /> All restaurants</Link>
           </Button>
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-navy-dark text-4xl shadow-elevated">
-              {restaurant.emoji}
+            <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-navy-dark text-4xl shadow-elevated">
+              {restaurant.slug === "gyroverse" ? (
+                <img src={gyroverseLogo} alt={restaurant.name} className="h-full w-full object-cover" />
+              ) : (
+                restaurant.emoji
+              )}
             </div>
             <div>
               <h1 className="font-display text-2xl font-bold sm:text-3xl">{restaurant.name}</h1>
