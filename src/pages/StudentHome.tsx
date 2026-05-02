@@ -5,6 +5,7 @@ import { TopBar } from "@/components/TopBar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Clock, Loader2 } from "lucide-react";
+import gyroverseLogo from "@/assets/gyroverse-logo.jpeg";
 
 interface Restaurant {
   id: string;
@@ -36,7 +37,7 @@ const StudentHome = () => {
       <TopBar />
 
       <section className="bg-gradient-hero text-primary-foreground">
-        <div className="container pt-14 pb-12 sm:pt-20 sm:pb-16">
+        <div className="container pt-14 pb-20 sm:pt-20 sm:pb-24">
           <div className="max-w-2xl animate-fade-in">
             <Badge className="mb-4 border-0 bg-forest text-primary-foreground hover:bg-forest">Skip the line</Badge>
             <h1 className="font-display text-3xl font-bold leading-tight sm:text-5xl">
@@ -49,7 +50,7 @@ const StudentHome = () => {
         </div>
       </section>
 
-      <section className="container -mt-6 pb-16">
+      <section className="container pt-10 pb-16">
         <div className="mb-5 flex items-end justify-between">
           <div>
             <h2 className="font-display text-xl font-bold sm:text-2xl">Campus restaurants</h2>
@@ -64,8 +65,17 @@ const StudentHome = () => {
             {restaurants.map((r) => (
               <Link key={r.id} to={`/restaurant/${r.slug}`}>
                 <Card className="group flex h-full flex-col overflow-hidden border-border/60 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-elevated">
-                  <div className="flex aspect-[5/3] items-center justify-center bg-gradient-hero text-6xl">
-                    <span>{r.emoji}</span>
+                  <div className="flex aspect-[5/3] items-center justify-center overflow-hidden bg-gradient-hero text-6xl">
+                    {r.slug === "gyroverse" ? (
+                      <img
+                        src={gyroverseLogo}
+                        alt="Gyroverse — Rollin' the Flavor"
+                        loading="lazy"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <span>{r.emoji}</span>
+                    )}
                   </div>
                   <div className="flex flex-1 flex-col gap-2 p-4">
                     <div className="flex items-start justify-between gap-2">
