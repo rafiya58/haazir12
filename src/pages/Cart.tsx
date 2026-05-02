@@ -20,7 +20,7 @@ const MAX_LOOKAHEAD_MIN = 120;
 
 const BANK_DETAILS = {
   name: "MUHAMMAD RAAHIM SIDDIQUI",
-  bank: "[Insert Bank Name]",
+  bank: "Meezan Bank",
   account: "01980110880540",
 };
 
