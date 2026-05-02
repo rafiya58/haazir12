@@ -66,7 +66,13 @@ const RestaurantMenu = () => {
       if (!map.has(i.category)) map.set(i.category, []);
       map.get(i.category)!.push(i);
     });
-    return Array.from(map.entries());
+    const entries = Array.from(map.entries());
+    // Push beverage-like categories to the end
+    entries.sort(([a], [b]) => {
+      const isBev = (c: string) => /bever|drink/i.test(c);
+      return Number(isBev(a)) - Number(isBev(b));
+    });
+    return entries;
   }, [items]);
 
   const handleAdd = (item: MenuItem) => {

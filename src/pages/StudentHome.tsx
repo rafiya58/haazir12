@@ -62,47 +62,61 @@ const StudentHome = () => {
           <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-forest" /></div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {restaurants.map((r) => (
-              <Link key={r.id} to={`/restaurant/${r.slug}`}>
-                <Card className="group flex h-full flex-col overflow-hidden border-border/60 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-elevated">
-                  <div className="flex aspect-[5/3] items-center justify-center overflow-hidden bg-gradient-hero text-6xl">
-                    {r.slug === "gyroverse" ? (
+            {restaurants
+              .filter((r) => r.slug === "gyroverse")
+              .map((r) => (
+                <Link key={r.id} to={`/restaurant/${r.slug}`}>
+                  <Card className="group flex h-full flex-col overflow-hidden border-border/60 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-elevated">
+                    <div className="flex aspect-[5/3] items-center justify-center overflow-hidden bg-gradient-hero text-6xl">
                       <img
                         src={gyroverseLogo}
                         alt="Gyroverse — Rollin' the Flavor"
                         loading="lazy"
                         className="h-full w-full object-contain"
                       />
-                    ) : (
-                      <span>{r.emoji}</span>
-                    )}
-                  </div>
-                  <div className="flex flex-1 flex-col gap-2 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="font-display text-lg font-bold text-navy">{r.name}</h3>
-                        <p className="text-xs text-muted-foreground">{r.cuisine}</p>
+                    </div>
+                    <div className="flex flex-1 flex-col gap-2 p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="font-display text-lg font-bold text-navy">{r.name}</h3>
+                          <p className="text-xs text-muted-foreground">{r.cuisine}</p>
+                        </div>
+                        {r.is_open ? (
+                          <Badge variant="secondary" className="bg-accent text-forest hover:bg-accent">
+                            <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse-soft rounded-full bg-forest" />
+                            Open
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">Closed</Badge>
+                        )}
                       </div>
-                      {r.is_open ? (
-                        <Badge variant="secondary" className="bg-accent text-forest hover:bg-accent">
-                          <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse-soft rounded-full bg-forest" />
-                          Open
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">Closed</Badge>
-                      )}
+                      <p className="line-clamp-2 text-sm text-muted-foreground">{r.description}</p>
+                      <div className="mt-auto flex items-center justify-between pt-2 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> ~10 min</span>
+                        <span className="flex items-center gap-1 font-medium text-forest transition-transform group-hover:translate-x-0.5">
+                          View menu <ArrowRight className="h-3.5 w-3.5" />
+                        </span>
+                      </div>
                     </div>
-                    <p className="line-clamp-2 text-sm text-muted-foreground">{r.description}</p>
-                    <div className="mt-auto flex items-center justify-between pt-2 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> ~10 min</span>
-                      <span className="flex items-center gap-1 font-medium text-forest transition-transform group-hover:translate-x-0.5">
-                        View menu <ArrowRight className="h-3.5 w-3.5" />
-                      </span>
-                    </div>
+                  </Card>
+                </Link>
+              ))}
+
+            <Card className="flex h-full flex-col overflow-hidden border-dashed border-border/60 shadow-card">
+              <div className="flex aspect-[5/3] items-center justify-center bg-muted text-5xl">🚧</div>
+              <div className="flex flex-1 flex-col gap-2 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-navy">More restaurants</h3>
+                    <p className="text-xs text-muted-foreground">Coming soon</p>
                   </div>
-                </Card>
-              </Link>
-            ))}
+                  <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">Soon</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Additional campus vendors will be available shortly. Stay tuned!
+                </p>
+              </div>
+            </Card>
           </div>
         )}
       </section>
