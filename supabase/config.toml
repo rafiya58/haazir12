@@ -1,1 +1,8 @@
 project_id = "gyhggvutqjjbhtujncwn"
+
+[auth.email]
+enable_confirmations = true
+
+[auth.email.template.confirmation]
+subject = "Verify your Haazir account"
+content_path = "./supabase/templates/confirmation.html"

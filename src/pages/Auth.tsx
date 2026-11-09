@@ -184,7 +184,6 @@ const Auth = () => {
         email: parsedEmail,
         password: parsedPassword,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
           data: {
             full_name: parsedName,
             account_type: accountType,
@@ -212,8 +211,12 @@ const Auth = () => {
         return;
       }
       if (data.session) {
-        toast.success("Your account is registered and signed in. Email confirmation is disabled, so no verification code was required.");
-        navigate(accountType === "vendor" ? "/vendor-application" : "/");
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          toast.error(`Email confirmation is disabled, and we couldn't close the unexpected session: ${signOutError.message}`);
+          return;
+        }
+        toast.error("Email confirmation is disabled for this project. Enable email confirmations in Supabase Auth settings to require the verification code.");
         return;
       }
       setSignupEmailToVerify(parsedEmail);
@@ -267,7 +270,6 @@ const Auth = () => {
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: signupEmailToVerify,
-        options: { emailRedirectTo: `${window.location.origin}/` },
       });
       if (error) {
         toast.error(error.message);
@@ -715,7 +717,7 @@ const Auth = () => {
                 ) : (
                   <div className="flex items-start gap-3 rounded-lg border border-forest/20 bg-accent p-3 text-xs text-accent-foreground">
                     <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-forest" />
-                    <p>Use any email and provide your business details. Your account is created first; the university reviews your application afterward. If you already have a student account, sign in with it and apply as a vendor to keep both roles on one account.</p>
+                    <p>Verify your email, then submit your business details for university review. You will not receive vendor access unless a campus admin approves the application. If you already have a student account, sign in with it and apply as a vendor to keep both roles on one account.</p>
                   </div>
                 )}
 
