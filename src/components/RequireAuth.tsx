@@ -20,11 +20,11 @@ export const RequireAuth = ({ children, requireRole }: Props) => {
   }
   if (!user) return <Navigate to="/auth" replace />;
   if (requireRole && !roles.includes(requireRole)) {
-    // Route to default landing for their actual role
-    if (roles.includes("restaurant")) return <Navigate to="/vendor" replace />;
-    if (roles.includes("admin")) return <Navigate to="/admin" replace />;
+    if (roles.includes("platform_admin")) return <Navigate to="/admin" replace />;
+    if (roles.includes("campus_admin")) return <Navigate to="/campus" replace />;
+    if (roles.includes("vendor") && !roles.includes("student")) return <Navigate to="/vendor" replace />;
     if (roles.includes("student")) return <Navigate to="/" replace />;
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/vendor-application" replace />;
   }
   return <>{children}</>;
 };

@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, TrendingUp, ShoppingBag, DollarSign, Building2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, TrendingUp, ShoppingBag, DollarSign, Building2, UserPlus, type LucideIcon } from "lucide-react";
+import { toast } from "sonner";
+import { universities } from "@/lib/universities";
 
 interface OrderRow {
   id: string; status: string; total: number; created_at: string; restaurant_id: string;
@@ -14,6 +20,34 @@ interface OrderRow {
 const AdminDashboard = () => {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteUniversity, setInviteUniversity] = useState("");
+  const [inviting, setInviting] = useState(false);
+
+  const inviteCampusAdmin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!inviteUniversity || !(inviteUniversity in universities)) {
+      toast.error("Select a university.");
+      return;
+    }
+    setInviting(true);
+    try {
+      const { error } = await supabase.functions.invoke("invite-campus-admin", {
+        body: { email: inviteEmail.trim(), university_id: inviteUniversity },
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success(`University admin invitation sent to ${inviteEmail.trim()}.`);
+      setInviteEmail("");
+      setInviteUniversity("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send the university admin invitation.");
+    } finally {
+      setInviting(false);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -68,13 +102,51 @@ const AdminDashboard = () => {
       <TopBar />
       <section className="bg-gradient-hero py-6 text-primary-foreground">
         <div className="container">
-          <Badge className="border-0 bg-forest text-primary-foreground hover:bg-forest">Haazir Admin</Badge>
+          <Badge className="border-0 bg-forest text-primary-foreground hover:bg-forest">Platform admin</Badge>
           <h1 className="mt-2 font-display text-2xl font-bold sm:text-3xl">Today's overview</h1>
           <p className="text-sm text-primary-foreground/70">Live transactions across all campus vendors</p>
         </div>
       </section>
 
       <section className="container space-y-6 py-6">
+        <Card className="p-5">
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-navy">
+            <UserPlus className="h-5 w-5 text-forest" /> Invite a campus admin
+          </h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Campus admin accounts are invite-only and are scoped to one university.
+          </p>
+          <form onSubmit={inviteCampusAdmin} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <div className="space-y-2">
+              <Label htmlFor="campus-admin-email">University admin email</Label>
+              <Input
+                id="campus-admin-email"
+                type="email"
+                autoComplete="email"
+                required
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                placeholder="admin@example.edu"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="campus-admin-university">University</Label>
+              <Select value={inviteUniversity} onValueChange={setInviteUniversity}>
+                <SelectTrigger id="campus-admin-university"><SelectValue placeholder="Select a university" /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(universities).map(([id, university]) => (
+                    <SelectItem key={id} value={id}>{university.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" variant="cta" disabled={inviting}>
+              {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+              Send invite
+            </Button>
+          </form>
+        </Card>
+
         <div className="grid gap-3 sm:grid-cols-3">
           <StatCard icon={ShoppingBag} label="Orders today" value={stats.todayCount.toString()} />
           <StatCard icon={DollarSign} label="Revenue today" value={`Rs ${stats.revenue.toFixed(0)}`} />
@@ -133,7 +205,7 @@ const AdminDashboard = () => {
   );
 };
 
-const StatCard = ({ icon: Icon, label, value, highlight = false }: { icon: any; label: string; value: string; highlight?: boolean }) => (
+const StatCard = ({ icon: Icon, label, value, highlight = false }: { icon: LucideIcon; label: string; value: string; highlight?: boolean }) => (
   <Card className={`p-5 ${highlight ? "bg-gradient-cta text-primary-foreground" : ""}`}>
     <div className="flex items-center justify-between">
       <p className={`text-xs uppercase tracking-wider ${highlight ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{label}</p>

@@ -159,18 +159,24 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          student_id: string | null
+          university: string | null
         }
         Insert: {
           created_at?: string
           email: string
           full_name?: string | null
           id: string
+          student_id?: string | null
+          university?: string | null
         }
         Update: {
           created_at?: string
           email?: string
           full_name?: string | null
           id?: string
+          student_id?: string | null
+          university?: string | null
         }
         Relationships: []
       }
@@ -184,6 +190,7 @@ export type Database = {
           is_open: boolean
           name: string
           slug: string
+          university_id: string
         }
         Insert: {
           created_at?: string
@@ -194,6 +201,7 @@ export type Database = {
           is_open?: boolean
           name: string
           slug: string
+          university_id?: string
         }
         Update: {
           created_at?: string
@@ -204,6 +212,7 @@ export type Database = {
           is_open?: boolean
           name?: string
           slug?: string
+          university_id?: string
         }
         Relationships: []
       }
@@ -212,18 +221,87 @@ export type Database = {
           id: string
           restaurant_id: string | null
           role: Database["public"]["Enums"]["app_role"]
+          university_id: string | null
           user_id: string
         }
         Insert: {
           id?: string
           restaurant_id?: string | null
           role: Database["public"]["Enums"]["app_role"]
+          university_id?: string | null
           user_id: string
         }
         Update: {
           id?: string
           restaurant_id?: string | null
           role?: Database["public"]["Enums"]["app_role"]
+          university_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      universities: {
+        Row: {
+          email_domain: string
+          id: string
+          name: string
+        }
+        Insert: {
+          email_domain: string
+          id: string
+          name: string
+        }
+        Update: {
+          email_domain?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      vendor_applications: {
+        Row: {
+          contact_number: string | null
+          created_at: string
+          cuisine: string | null
+          description: string | null
+          id: string
+          restaurant_name: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          university_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          contact_number?: string | null
+          created_at?: string
+          cuisine?: string | null
+          description?: string | null
+          id?: string
+          restaurant_name: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          university_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          contact_number?: string | null
+          created_at?: string
+          cuisine?: string | null
+          description?: string | null
+          id?: string
+          restaurant_name?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          university_id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -233,10 +311,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      assign_vendor: {
-        Args: { _email: string; _restaurant_slug: string }
-        Returns: undefined
-      }
       get_user_restaurant: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -245,10 +319,27 @@ export type Database = {
         }
         Returns: boolean
       }
-      promote_to_admin: { Args: { _email: string }; Returns: undefined }
+      has_university_role: {
+        Args: { _role: Database["public"]["Enums"]["app_role"]; _university_id: string; _user_id: string }
+        Returns: boolean
+      }
+      review_vendor_application: {
+        Args: { _application_id: string; _decision: string; _review_note?: string }
+        Returns: undefined
+      }
+      submit_vendor_application: {
+        Args: {
+          _contact_number: string
+          _cuisine?: string
+          _description?: string
+          _restaurant_name: string
+          _university_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
-      app_role: "admin" | "restaurant" | "student"
+      app_role: "student" | "vendor" | "campus_admin" | "platform_admin"
       order_status:
         | "pending"
         | "preparing"
@@ -382,7 +473,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "restaurant", "student"],
+      app_role: ["student", "vendor", "campus_admin", "platform_admin"],
       order_status: ["pending", "preparing", "ready", "completed", "cancelled"],
     },
   },

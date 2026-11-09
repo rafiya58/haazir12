@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Utensils, LogOut, ShoppingBag, ClipboardList, Shield, Store } from "lucide-react";
+import { Utensils, LogOut, ShoppingBag, ClipboardList, Shield, Store, University } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/store/cart";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,9 @@ export const TopBar = () => {
   const cartCount = useCart((s) => s.items.reduce((n, i) => n + i.quantity, 0));
 
   const isStudent = roles.includes("student");
-  const isVendor = roles.includes("restaurant");
-  const isAdmin = roles.includes("admin");
+  const isVendor = roles.includes("vendor");
+  const isCampusAdmin = roles.includes("campus_admin");
+  const isPlatformAdmin = roles.includes("platform_admin");
 
   const handleSignOut = async () => {
     await signOut();
@@ -55,9 +56,19 @@ export const TopBar = () => {
                 <Link to="/vendor" className="gap-1.5"><Store className="h-4 w-4" /><span className="hidden sm:inline">Dashboard</span></Link>
               </Button>
             )}
-            {isAdmin && (
+            {isStudent && !isVendor && (
               <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-navy-light hover:text-primary-foreground">
-                <Link to="/admin" className="gap-1.5"><Shield className="h-4 w-4" /><span className="hidden sm:inline">Admin</span></Link>
+                <Link to="/vendor-application" className="gap-1.5"><Store className="h-4 w-4" /><span className="hidden sm:inline">Become a vendor</span></Link>
+              </Button>
+            )}
+            {isCampusAdmin && (
+              <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-navy-light hover:text-primary-foreground">
+                <Link to="/campus" className="gap-1.5"><University className="h-4 w-4" /><span className="hidden sm:inline">Campus admin</span></Link>
+              </Button>
+            )}
+            {isPlatformAdmin && (
+              <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-navy-light hover:text-primary-foreground">
+                <Link to="/admin" className="gap-1.5"><Shield className="h-4 w-4" /><span className="hidden sm:inline">Platform admin</span></Link>
               </Button>
             )}
             <Button onClick={handleSignOut} variant="ghost" size="sm" className="text-primary-foreground hover:bg-navy-light hover:text-primary-foreground">

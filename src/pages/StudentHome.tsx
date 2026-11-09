@@ -44,7 +44,7 @@ const StudentHome = () => {
               Pre-order. Pickup. <span className="text-forest-light">Eat in 10.</span>
             </h1>
             <p className="mt-3 max-w-lg text-sm text-primary-foreground/75 sm:text-base">
-              Order ahead from your favourite IBA campus restaurants. Real-time confirmations, no queues.
+              Order ahead from campus restaurants. Real-time confirmations, no queues.
             </p>
           </div>
         </div>
@@ -62,18 +62,18 @@ const StudentHome = () => {
           <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-forest" /></div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {restaurants
-              .filter((r) => r.slug === "gyroverse")
-              .map((r) => (
+            {restaurants.map((r) => (
                 <Link key={r.id} to={`/restaurant/${r.slug}`}>
                   <Card className="group flex h-full flex-col overflow-hidden border-border/60 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-elevated">
                     <div className="flex aspect-[5/3] items-center justify-center overflow-hidden bg-gradient-hero text-6xl">
-                      <img
-                        src={gyroverseLogo}
-                        alt="Gyroverse — Rollin' the Flavor"
-                        loading="lazy"
-                        className="h-full w-full object-contain"
-                      />
+                      {r.slug === "gyroverse" ? (
+                        <img
+                          src={gyroverseLogo}
+                          alt={r.name}
+                          loading="lazy"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : r.emoji ?? "🍽️"}
                     </div>
                     <div className="flex flex-1 flex-col gap-2 p-4">
                       <div className="flex items-start justify-between gap-2">
@@ -101,22 +101,6 @@ const StudentHome = () => {
                   </Card>
                 </Link>
               ))}
-
-            <Card className="flex h-full flex-col overflow-hidden border-dashed border-border/60 shadow-card">
-              <div className="flex aspect-[5/3] items-center justify-center bg-muted text-5xl">🚧</div>
-              <div className="flex flex-1 flex-col gap-2 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-display text-lg font-bold text-navy">More restaurants</h3>
-                    <p className="text-xs text-muted-foreground">Coming soon</p>
-                  </div>
-                  <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">Soon</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Additional campus vendors will be available shortly. Stay tuned!
-                </p>
-              </div>
-            </Card>
           </div>
         )}
       </section>
