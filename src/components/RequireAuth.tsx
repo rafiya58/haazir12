@@ -33,7 +33,7 @@ export const RequireAuth = ({ children, requireRole }: Props) => {
     if (roles.includes("campus_admin")) return <Navigate to="/campus" replace />;
     if (roles.includes("vendor") && !roles.includes("student")) return <Navigate to="/vendor" replace />;
     if (roles.includes("student")) return <Navigate to="/" replace />;
-    return <Navigate to="/vendor-application" replace />;
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 };

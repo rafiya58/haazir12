@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Utensils, LogOut, ShoppingBag, ClipboardList, Shield, Store, University, ArrowLeftRight } from "lucide-react";
+import { Utensils, LogOut, ShoppingBag, ClipboardList, Shield, Store, University, ArrowLeftRight, House } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/store/cart";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,9 @@ export const TopBar = () => {
           <nav className="flex items-center gap-1 sm:gap-2">
             {isStudent && (
               <>
+                <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-navy-light hover:text-primary-foreground">
+                  <Link to="/" className="gap-1.5"><House className="h-4 w-4" /><span>Browse restaurants</span></Link>
+                </Button>
                 <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-navy-light hover:text-primary-foreground">
                   <Link to="/orders" className="gap-1.5"><ClipboardList className="h-4 w-4" /><span className="hidden sm:inline">My Orders</span></Link>
                 </Button>

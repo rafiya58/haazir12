@@ -4,9 +4,11 @@ import { Loader2 } from "lucide-react";
 import StudentHome from "./StudentHome";
 import VendorApplication from "./VendorApplication";
 import SetCampusAdminPassword from "./SetCampusAdminPassword";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
-  const { user, loading, roles, activeMode, roleError } = useAuth();
+  const { user, loading, roles, activeMode, roleError, signOut } = useAuth();
 
   if (loading) {
     return (
@@ -36,7 +38,19 @@ const Index = () => {
     return <Navigate to="/vendor" replace />;
   }
   if (!roles.includes("student") && !roles.includes("vendor")) {
-    return <VendorApplication />;
+    if (user.user_metadata.account_type === "vendor") return <VendorApplication />;
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="max-w-lg space-y-4 p-6 text-center">
+          <h1 className="font-display text-xl font-bold text-navy">Workspace access is not configured</h1>
+          <p className="text-sm text-muted-foreground">
+            This account has signed in successfully, but no app role is assigned to it.
+            Ask an existing platform admin to verify this account's access.
+          </p>
+          <Button variant="outline" onClick={() => void signOut()}>Sign out</Button>
+        </Card>
+      </main>
+    );
   }
 
   return <StudentHome />;
