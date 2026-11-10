@@ -1,17 +1,17 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Utensils, LogOut, ShoppingBag, ClipboardList, Shield, Store, University } from "lucide-react";
+import { Utensils, LogOut, ShoppingBag, ClipboardList, Shield, Store, University, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/store/cart";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export const TopBar = () => {
-  const { user, roles, signOut } = useAuth();
+  const { user, roles, activeMode, switchMode, signOut } = useAuth();
   const navigate = useNavigate();
   const cartCount = useCart((s) => s.items.reduce((n, i) => n + i.quantity, 0));
 
-  const isStudent = roles.includes("student");
-  const isVendor = roles.includes("vendor");
+  const isStudent = roles.includes("student") && (!roles.includes("vendor") || activeMode === "student");
+  const isVendor = roles.includes("vendor") && (!roles.includes("student") || activeMode === "vendor");
   const isCampusAdmin = roles.includes("campus_admin");
   const isPlatformAdmin = roles.includes("platform_admin");
 
@@ -54,6 +54,20 @@ export const TopBar = () => {
             {isVendor && (
               <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-navy-light hover:text-primary-foreground">
                 <Link to="/vendor" className="gap-1.5"><Store className="h-4 w-4" /><span className="hidden sm:inline">Dashboard</span></Link>
+              </Button>
+            )}
+            {roles.includes("student") && roles.includes("vendor") && (
+              <Button
+                onClick={() => {
+                  const nextMode = switchMode();
+                  navigate(nextMode === "vendor" ? "/vendor" : "/");
+                }}
+                variant="ghost"
+                size="sm"
+                className="text-primary-foreground hover:bg-navy-light hover:text-primary-foreground"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+                <span className="ml-1.5">Switch to {activeMode === "student" ? "vendor" : "student"}</span>
               </Button>
             )}
             {isStudent && !isVendor && (

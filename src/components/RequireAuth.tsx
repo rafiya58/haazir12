@@ -9,7 +9,7 @@ interface Props {
 }
 
 export const RequireAuth = ({ children, requireRole }: Props) => {
-  const { user, loading, roles } = useAuth();
+  const { user, loading, roles, activeMode } = useAuth();
 
   if (loading) {
     return (
@@ -19,6 +19,15 @@ export const RequireAuth = ({ children, requireRole }: Props) => {
     );
   }
   if (!user) return <Navigate to="/auth" replace />;
+  if (
+    requireRole
+    && (requireRole === "student" || requireRole === "vendor")
+    && roles.includes("student")
+    && roles.includes("vendor")
+    && activeMode !== requireRole
+  ) {
+    return <Navigate to={activeMode === "vendor" ? "/vendor" : "/"} replace />;
+  }
   if (requireRole && !roles.includes(requireRole)) {
     if (roles.includes("platform_admin")) return <Navigate to="/admin" replace />;
     if (roles.includes("campus_admin")) return <Navigate to="/campus" replace />;

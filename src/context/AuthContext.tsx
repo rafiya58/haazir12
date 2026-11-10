@@ -3,18 +3,21 @@ import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 export type AppRole = "student" | "vendor" | "campus_admin" | "platform_admin";
+export type AccountMode = "student" | "vendor";
 
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
   roles: AppRole[];
+  activeMode: AccountMode;
   roleError: string | null;
   restaurantId: string | null;
   universityIds: string[];
   campusUniversityIds: string[];
   signOut: () => Promise<void>;
   refreshRoles: () => Promise<void>;
+  switchMode: () => AccountMode;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -24,10 +27,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<AppRole[]>([]);
+  const [activeMode, setActiveMode] = useState<AccountMode>("student");
   const [roleError, setRoleError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [universityIds, setUniversityIds] = useState<string[]>([]);
   const [campusUniversityIds, setCampusUniversityIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (roles.includes(activeMode)) return;
+    setActiveMode(roles.includes("vendor") && !roles.includes("student") ? "vendor" : "student");
+  }, [activeMode, roles]);
 
   const loadRoles = async (userId: string) => {
     const { data, error } = await supabase
@@ -100,8 +109,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (user) await loadRoles(user.id);
   };
 
+  const switchMode = () => {
+    const nextMode: AccountMode = activeMode === "student" ? "vendor" : "student";
+    setActiveMode(nextMode);
+    return nextMode;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, roles, roleError, restaurantId, universityIds, campusUniversityIds, signOut, refreshRoles }}>
+    <AuthContext.Provider value={{ user, session, loading, roles, activeMode, roleError, restaurantId, universityIds, campusUniversityIds, signOut, refreshRoles, switchMode }}>
       {children}
     </AuthContext.Provider>
   );

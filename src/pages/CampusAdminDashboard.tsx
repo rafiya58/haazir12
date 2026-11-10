@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, University } from "lucide-react";
+import { DollarSign, Loader2, ShoppingBag, University, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { TopBar } from "@/components/TopBar";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { universities } from "@/lib/universities";
+
+interface Campus {
+  id: string;
+  name: string;
+}
+
+interface CampusOrder {
+  id: string;
+  status: string;
+  total: number;
+  created_at: string;
+  payment_status: string;
+}
 
 interface VendorApplication {
   id: string;
@@ -37,6 +49,8 @@ const CampusAdminDashboard = () => {
   const [universityId, setUniversityId] = useState("");
   const [applications, setApplications] = useState<VendorApplication[]>([]);
   const [vendors, setVendors] = useState<ApprovedVendor[]>([]);
+  const [campuses, setCampuses] = useState<Campus[]>([]);
+  const [orders, setOrders] = useState<CampusOrder[]>([]);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -45,13 +59,36 @@ const CampusAdminDashboard = () => {
     if (!universityId && campusUniversityIds.length > 0) setUniversityId(campusUniversityIds[0]);
   }, [campusUniversityIds, universityId]);
 
+  useEffect(() => {
+    let active = true;
+    const loadCampuses = async () => {
+      if (campusUniversityIds.length === 0) return;
+      const { data, error } = await supabase
+        .from("universities")
+        .select("id,name")
+        .in("id", campusUniversityIds);
+      if (!active) return;
+      if (error) {
+        toast.error(`Unable to load campus details: ${error.message}`);
+        return;
+      }
+      setCampuses(data ?? []);
+    };
+    void loadCampuses();
+    return () => { active = false; };
+  }, [campusUniversityIds]);
+
   const loadDashboard = useCallback(async () => {
     if (!universityId) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    const [{ data: applicationData, error: applicationError }, { data: vendorData, error: vendorError }] = await Promise.all([
+    const [
+      { data: applicationData, error: applicationError },
+      { data: vendorData, error: vendorError },
+      { data: orderData, error: orderError },
+    ] = await Promise.all([
       supabase
         .from("vendor_applications")
         .select("id,user_id,university_id,restaurant_name,contact_number,description,cuisine,created_at")
@@ -63,17 +100,24 @@ const CampusAdminDashboard = () => {
         .select("id,name,cuisine,is_open")
         .eq("university_id", universityId)
         .order("name"),
+      supabase
+        .from("orders")
+        .select("id,status,total,created_at,payment_status,restaurants!inner(university_id)")
+        .eq("restaurants.university_id", universityId)
+        .order("created_at", { ascending: false }),
     ]);
 
-    if (applicationError || vendorError) {
-      toast.error(applicationError?.message ?? vendorError?.message ?? "Unable to load campus administration data.");
+    if (applicationError || vendorError || orderError) {
+      toast.error(applicationError?.message ?? vendorError?.message ?? orderError?.message ?? "Unable to load campus administration data.");
       setApplications([]);
       setVendors([]);
+      setOrders([]);
       setLoading(false);
       return;
     }
 
     const rows = applicationData ?? [];
+    setOrders((orderData ?? []) as unknown as CampusOrder[]);
     if (rows.length === 0) {
       setApplications([]);
     } else {
@@ -140,7 +184,11 @@ const CampusAdminDashboard = () => {
     await loadDashboard();
   };
 
-  const universityName = universities[universityId as keyof typeof universities]?.name ?? "Campus";
+  const universityName = campuses.find((campus) => campus.id === universityId)?.name ?? "Campus";
+  const revenue = orders
+    .filter((order) => order.status !== "cancelled")
+    .reduce((sum, order) => sum + Number(order.total), 0);
+  const pendingPayments = orders.filter((order) => order.payment_status === "pending").length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -149,8 +197,8 @@ const CampusAdminDashboard = () => {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <Badge className="border-0 bg-forest text-primary-foreground">Campus admin</Badge>
-            <h1 className="mt-2 font-display text-2xl font-bold text-navy">{universityName} vendors</h1>
-            <p className="text-sm text-muted-foreground">Review vendor applications and manage your university's approved vendors.</p>
+            <h1 className="mt-2 font-display text-2xl font-bold text-navy">{universityName} overview</h1>
+            <p className="text-sm text-muted-foreground">Campus order analytics and vendor approvals.</p>
           </div>
           {campusUniversityIds.length > 1 && (
             <div className="w-full space-y-2 sm:w-64">
@@ -160,7 +208,7 @@ const CampusAdminDashboard = () => {
                 <SelectContent>
                   {campusUniversityIds.map((id) => (
                     <SelectItem key={id} value={id}>
-                      {universities[id as keyof typeof universities]?.name ?? id}
+                      {campuses.find((campus) => campus.id === id)?.name ?? id}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -173,8 +221,14 @@ const CampusAdminDashboard = () => {
           <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-forest" /></div>
         ) : (
           <>
+            <section className="grid gap-3 sm:grid-cols-3">
+              <StatCard icon={ShoppingBag} label="Orders" value={orders.length.toString()} />
+              <StatCard icon={DollarSign} label="Revenue" value={`Rs ${revenue.toFixed(0)}`} />
+              <StatCard icon={University} label="Pending payments" value={pendingPayments.toString()} />
+            </section>
+
             <section className="space-y-3">
-              <h2 className="font-display text-lg font-bold text-navy">Pending applications</h2>
+              <h2 className="font-display text-lg font-bold text-navy">Approval required</h2>
               {applications.length === 0 ? (
                 <Card className="p-6 text-center text-sm text-muted-foreground">No vendor applications need review.</Card>
               ) : applications.map((application) => (
@@ -259,5 +313,15 @@ const CampusAdminDashboard = () => {
     </div>
   );
 };
+
+const StatCard = ({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) => (
+  <Card className="p-5">
+    <div className="flex items-center justify-between">
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+      <Icon className="h-4 w-4 text-forest" />
+    </div>
+    <p className="mt-2 font-display text-3xl font-bold text-navy">{value}</p>
+  </Card>
+);
 
 export default CampusAdminDashboard;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,22 +9,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { studentSignupSchema } from "@/lib/studentSignup";
-import { matchesUniversityEmail, universities, type UniversityId } from "@/lib/universities";
 import { toast } from "sonner";
 import { Utensils, GraduationCap, Store, Loader2, ShieldCheck } from "lucide-react";
 import { z } from "zod";
 
 type AccountType = "student" | "vendor";
-type LoginType = AccountType | "campus_admin" | "platform_admin";
 type RecoveryStep = "request" | "verify" | "password";
 type AuthTab = "login" | "signup";
+
+interface CampusOption {
+  id: string;
+  name: string;
+  email_domain: string;
+}
 
 const vendorSignupSchema = z.object({
   email: z.string().trim().email("Enter a valid email").max(255),
   password: z.string().min(8, "Min 8 characters").max(72),
   fullName: z.string().trim().min(2, "Enter your name").max(80),
   contactNumber: z.string().trim().regex(/^\+?[0-9][0-9 ()-]{6,23}$/, "Enter a valid contact number"),
-  university: z.enum(["iba", "habib"]),
+  university: z.string().min(1, "Select a university"),
   businessName: z.string().trim().min(2, "Enter your business name").max(100),
   businessDescription: z.string().trim().min(10, "Add a short business description").max(500),
   confirmPassword: z.string().min(1, "Confirm your password"),
@@ -49,18 +53,17 @@ const newPasswordSchema = z.string().min(8, "Min 8 characters").max(72);
 const Auth = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [campuses, setCampuses] = useState<CampusOption[]>([]);
 
   // Login form
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [loginAccountType, setLoginAccountType] = useState<LoginType>("student");
-  const [loginUniversity, setLoginUniversity] = useState<UniversityId | "">("");
 
   // Signup form
   const [accountType, setAccountType] = useState<AccountType>("student");
   const [authTab, setAuthTab] = useState<AuthTab>("login");
-  const [signupUniversity, setSignupUniversity] = useState<UniversityId | "">("");
-  const [vendorUniversity, setVendorUniversity] = useState<UniversityId | "">("");
+  const [signupUniversity, setSignupUniversity] = useState("");
+  const [vendorUniversity, setVendorUniversity] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [studentId, setStudentId] = useState("");
@@ -78,6 +81,24 @@ const Auth = () => {
   const [recoveryOtp, setRecoveryOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
+  useEffect(() => {
+    let active = true;
+    const loadCampuses = async () => {
+      const { data, error } = await supabase
+        .from("campus_directory")
+        .select("id,name,email_domain")
+        .order("name");
+      if (!active) return;
+      if (error) {
+        toast.error(`Unable to load campuses: ${error.message}`);
+        return;
+      }
+      setCampuses(data ?? []);
+    };
+    void loadCampuses();
+    return () => { active = false; };
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = loginSchema.safeParse({ email: loginEmail, password: loginPassword });
@@ -85,17 +106,6 @@ const Auth = () => {
       toast.error(parsed.error.issues[0].message);
       return;
     }
-    if (loginAccountType === "student") {
-      if (!loginUniversity) {
-        toast.error("Select your university");
-        return;
-      }
-      if (!matchesUniversityEmail(parsed.data.email, loginUniversity)) {
-        toast.error(`Use your @${universities[loginUniversity].domain} student email`);
-        return;
-      }
-    }
-
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithPassword({
@@ -107,7 +117,7 @@ const Auth = () => {
         return;
       }
       toast.success("Welcome back!");
-      navigate(loginAccountType === "vendor" ? "/vendor-application" : "/");
+      navigate("/");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to sign in.");
     } finally {
@@ -124,7 +134,7 @@ const Auth = () => {
     let parsedStudentId: string | undefined;
     let parsedVendor: {
       contactNumber: string;
-      university: UniversityId;
+      university: string;
       businessName: string;
       businessDescription: string;
     } | undefined;
@@ -140,12 +150,13 @@ const Auth = () => {
         toast.error(parsed.error.issues[0].message);
         return;
       }
-      if (!signupUniversity) {
+      const selectedCampus = campuses.find((campus) => campus.id === signupUniversity);
+      if (!selectedCampus) {
         toast.error("Select your university");
         return;
       }
-      if (!matchesUniversityEmail(parsed.data.email, signupUniversity)) {
-        toast.error(`Use your @${universities[signupUniversity].domain} student email`);
+      if (parsed.data.email.split("@")[1]?.toLowerCase() !== selectedCampus.email_domain.toLowerCase()) {
+        toast.error(`Use your @${selectedCampus.email_domain} student email`);
         return;
       }
       parsedEmail = parsed.data.email;
@@ -165,6 +176,10 @@ const Auth = () => {
       });
       if (!parsed.success) {
         toast.error(parsed.error.issues[0].message);
+        return;
+      }
+      if (!campuses.some((campus) => campus.id === parsed.data.university)) {
+        toast.error("Select a supported campus");
         return;
       }
       parsedEmail = parsed.data.email;
@@ -202,7 +217,6 @@ const Auth = () => {
       if (error) {
         if (accountType === "vendor" && /already registered|already exists/i.test(error.message)) {
           setLoginEmail(parsedEmail);
-          setLoginAccountType("vendor");
           setAuthTab("login");
           toast.error("This email already has an account. Sign in with it, then submit your vendor application; your student access will remain.");
           return;
@@ -485,85 +499,13 @@ const Auth = () => {
 
               <TabsContent value="login" className="mt-6">
                 <form onSubmit={handleLogin} className="space-y-4">
-                  <RadioGroup
-                    value={loginAccountType}
-                    onValueChange={(value) => setLoginAccountType(value as LoginType)}
-                    className="grid grid-cols-2 gap-2"
-                  >
-                    <Label
-                      htmlFor="login-student"
-                      className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm transition-colors ${
-                        loginAccountType === "student" ? "border-forest bg-accent" : "border-border"
-                      }`}
-                    >
-                      <RadioGroupItem id="login-student" value="student" className="sr-only" />
-                      <GraduationCap className="h-4 w-4 text-forest" />
-                      <span className="font-medium">Student</span>
-                    </Label>
-                    <Label
-                      htmlFor="login-vendor"
-                      className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm transition-colors ${
-                        loginAccountType === "vendor" ? "border-forest bg-accent" : "border-border"
-                      }`}
-                    >
-                      <RadioGroupItem id="login-vendor" value="vendor" className="sr-only" />
-                      <ShieldCheck className="h-4 w-4 text-forest" />
-                      <span className="font-medium">Vendor</span>
-                    </Label>
-                    <Label
-                      htmlFor="login-campus-admin"
-                      className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm transition-colors ${
-                        loginAccountType === "campus_admin" ? "border-forest bg-accent" : "border-border"
-                      }`}
-                    >
-                      <RadioGroupItem id="login-campus-admin" value="campus_admin" className="sr-only" />
-                      <Store className="h-4 w-4 text-forest" />
-                      <span className="font-medium">Campus admin</span>
-                    </Label>
-                    <Label
-                      htmlFor="login-platform-admin"
-                      className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm transition-colors ${
-                        loginAccountType === "platform_admin" ? "border-forest bg-accent" : "border-border"
-                      }`}
-                    >
-                      <RadioGroupItem id="login-platform-admin" value="platform_admin" className="sr-only" />
-                      <ShieldCheck className="h-4 w-4 text-forest" />
-                      <span className="font-medium">Platform admin</span>
-                    </Label>
-                  </RadioGroup>
-
-                  {loginAccountType === "student" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="login-university">University</Label>
-                      <Select
-                        value={loginUniversity}
-                        onValueChange={(value) => setLoginUniversity(value as UniversityId)}
-                      >
-                        <SelectTrigger id="login-university">
-                          <SelectValue placeholder="Select your university" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(universities).map(([id, university]) => (
-                            <SelectItem key={id} value={id}>
-                              {university.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Email</Label>
                     <Input
                       id="login-email"
                       type="email"
                       autoComplete="email"
-                      placeholder={
-                        loginAccountType === "student" && loginUniversity
-                          ? `student@${universities[loginUniversity].domain}`
-                          : "you@example.com"
-                      }
+                      placeholder="you@example.com"
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
                     />
@@ -596,7 +538,7 @@ const Auth = () => {
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
                   </Button>
                   <p className="text-center text-xs text-muted-foreground">
-                    Vendor accounts use the Vendor option. University admins sign in using an invitation; platform admins are provisioned by backend operators.
+                    Sign in with your account and Haazir will open the right workspace.
                   </p>
                 </form>
               </TabsContent>
@@ -688,15 +630,15 @@ const Auth = () => {
                       <Label htmlFor="signup-university">University</Label>
                       <Select
                         value={signupUniversity}
-                        onValueChange={(value) => setSignupUniversity(value as UniversityId)}
+                        onValueChange={setSignupUniversity}
                       >
                         <SelectTrigger id="signup-university">
                           <SelectValue placeholder="Select your university" />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(universities).map(([id, university]) => (
-                            <SelectItem key={id} value={id}>
-                              {university.name}
+                          {campuses.map((campus) => (
+                            <SelectItem key={campus.id} value={campus.id}>
+                              {campus.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -707,9 +649,9 @@ const Auth = () => {
                       <p>
                         Use your selected university's student email:
                         {" "}<span className="font-semibold">
-                          {signupUniversity
-                            ? `@${universities[signupUniversity].domain}`
-                            : "@khi.iba.edu.pk or @st.habib.edu.pk"}
+                          {campuses.find((campus) => campus.id === signupUniversity)
+                            ? `@${campuses.find((campus) => campus.id === signupUniversity)?.email_domain}`
+                            : "your campus email domain"}
                         </span>.
                       </p>
                     </div>
@@ -734,7 +676,7 @@ const Auth = () => {
                       autoComplete="email"
                       placeholder={
                         accountType === "student" && signupUniversity
-                          ? `student@${universities[signupUniversity].domain}`
+                          ? `student@${campuses.find((campus) => campus.id === signupUniversity)?.email_domain ?? ""}`
                           : accountType === "student"
                             ? "Select your university first"
                             : "you@example.com"
@@ -761,14 +703,14 @@ const Auth = () => {
                         <Label htmlFor="vendor-university-signup">University</Label>
                         <Select
                           value={vendorUniversity}
-                          onValueChange={(value) => setVendorUniversity(value as UniversityId)}
+                          onValueChange={setVendorUniversity}
                         >
                           <SelectTrigger id="vendor-university-signup">
                             <SelectValue placeholder="Select the university" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(universities).map(([id, university]) => (
-                              <SelectItem key={id} value={id}>{university.name}</SelectItem>
+                            {campuses.map((campus) => (
+                              <SelectItem key={campus.id} value={campus.id}>{campus.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>

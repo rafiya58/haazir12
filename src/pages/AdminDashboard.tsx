@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -6,87 +6,145 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, TrendingUp, ShoppingBag, DollarSign, Building2, UserPlus, type LucideIcon } from "lucide-react";
+import { Loader2, TrendingUp, ShoppingBag, DollarSign, Building2, UserPlus, Copy, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { universities } from "@/lib/universities";
 
 interface OrderRow {
   id: string; status: string; total: number; created_at: string; restaurant_id: string;
-  payment_proof_url: string | null;
-  restaurants: { name: string; emoji: string | null } | null;
+  payment_proof_url: string | null; payment_status: "pending" | "paid" | "failed";
+  restaurants: { name: string; emoji: string | null; university_id: string } | null;
+}
+
+interface Campus {
+  id: string;
+  name: string;
+  email_domain: string;
+  location: string | null;
+  contact_email: string | null;
 }
 
 const AdminDashboard = () => {
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [campuses, setCampuses] = useState<Campus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteUniversity, setInviteUniversity] = useState("");
+  const [campusName, setCampusName] = useState("");
+  const [campusDomain, setCampusDomain] = useState("");
+  const [campusLocation, setCampusLocation] = useState("");
+  const [campusContactEmail, setCampusContactEmail] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [inviteUrl, setInviteUrl] = useState("");
   const [inviting, setInviting] = useState(false);
 
   const inviteCampusAdmin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!inviteUniversity || !(inviteUniversity in universities)) {
-      toast.error("Select a university.");
-      return;
-    }
     setInviting(true);
     try {
-      const { error } = await supabase.functions.invoke("invite-campus-admin", {
-        body: { email: inviteEmail.trim(), university_id: inviteUniversity },
+      const { data, error } = await supabase.functions.invoke("invite-campus-admin", {
+        body: {
+          campus_name: campusName.trim(),
+          email_domain: campusDomain.trim().toLowerCase(),
+          location: campusLocation.trim(),
+          contact_email: campusContactEmail.trim().toLowerCase(),
+          admin_email: adminEmail.trim().toLowerCase(),
+        },
       });
       if (error) {
         toast.error(error.message);
         return;
       }
-      toast.success(`University admin invitation sent to ${inviteEmail.trim()}.`);
-      setInviteEmail("");
-      setInviteUniversity("");
+      if (typeof data?.invite_url !== "string" || typeof data?.campus_id !== "string") {
+        toast.error("Campus was onboarded, but the invitation link was not returned.");
+        return;
+      }
+      setInviteUrl(data.invite_url);
+      setCampusName("");
+      setCampusDomain("");
+      setCampusLocation("");
+      setCampusContactEmail("");
+      setAdminEmail("");
+      toast.success("Campus onboarded. Copy and share the admin invitation link.");
+      await loadDashboard();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to send the university admin invitation.");
+      toast.error(error instanceof Error ? error.message : "Unable to onboard the campus or generate its admin invitation.");
     } finally {
       setInviting(false);
     }
   };
 
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase
+  const loadDashboard = useCallback(async () => {
+      const [{ data: orderData, error: orderError }, { data: campusData, error: campusError }] = await Promise.all([
+        supabase
         .from("orders")
-        .select("id,status,total,created_at,restaurant_id,payment_proof_url,restaurants(name,emoji)")
-        .order("created_at", { ascending: false });
-      setOrders((data as unknown as OrderRow[]) ?? []);
+        .select("id,status,total,created_at,restaurant_id,payment_proof_url,payment_status,restaurants(name,emoji,university_id)")
+        .order("created_at", { ascending: false }),
+        supabase.from("universities").select("id,name,email_domain,location,contact_email").order("name"),
+      ]);
+      if (orderError || campusError) {
+        toast.error(orderError?.message ?? campusError?.message ?? "Unable to load platform analytics.");
+        setOrders([]);
+        setCampuses([]);
+        setLoading(false);
+        return;
+      }
+      setOrders((orderData as unknown as OrderRow[]) ?? []);
+      setCampuses(campusData ?? []);
       setLoading(false);
-    };
-    load();
+  }, []);
+
+  useEffect(() => {
+    void loadDashboard();
     const channel = supabase
       .channel("admin-orders")
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => void loadDashboard())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [loadDashboard]);
 
   const stats = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todayOrders = orders.filter((o) => new Date(o.created_at) >= today);
     const revenue = todayOrders.filter((o) => o.status !== "cancelled").reduce((s, o) => s + Number(o.total), 0);
-    const byVendor = new Map<string, { name: string; emoji: string | null; orders: number; revenue: number }>();
-    todayOrders.forEach((o) => {
-      const key = o.restaurant_id;
-      const existing = byVendor.get(key) ?? {
-        name: o.restaurants?.name ?? "Unknown", emoji: o.restaurants?.emoji ?? "🍽️", orders: 0, revenue: 0
-      };
+    const byCampus = new Map(campuses.map((campus) => [campus.id, {
+      id: campus.id, name: campus.name, orders: 0, revenue: 0,
+    }]));
+    orders.forEach((o) => {
+      const campusId = o.restaurants?.university_id;
+      if (!campusId) return;
+      const existing = byCampus.get(campusId);
+      if (!existing) return;
       existing.orders += 1;
       if (o.status !== "cancelled") existing.revenue += Number(o.total);
-      byVendor.set(key, existing);
     });
     return {
       todayCount: todayOrders.length,
       revenue,
       activeNow: orders.filter((o) => ["pending", "preparing", "ready"].includes(o.status)).length,
-      byVendor: Array.from(byVendor.values()).sort((a, b) => b.revenue - a.revenue),
+      byCampus: Array.from(byCampus.values()).sort((a, b) => b.revenue - a.revenue),
     };
-  }, [orders]);
+  }, [orders, campuses]);
+
+  const needsAttention = orders.filter((order) => ["pending", "failed"].includes(order.payment_status));
+  const updatePaymentStatus = async (orderId: string, status: "paid" | "failed") => {
+    const { error } = await supabase.rpc("set_order_payment_status", {
+      _order_id: orderId,
+      _payment_status: status,
+    });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`Payment marked ${status}.`);
+    await loadDashboard();
+  };
+
+  const copyInviteUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      toast.success("Invitation link copied.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to copy the invitation link.");
+    }
+  };
 
   if (loading) {
     return (
@@ -103,48 +161,93 @@ const AdminDashboard = () => {
       <section className="bg-gradient-hero py-6 text-primary-foreground">
         <div className="container">
           <Badge className="border-0 bg-forest text-primary-foreground hover:bg-forest">Platform admin</Badge>
-          <h1 className="mt-2 font-display text-2xl font-bold sm:text-3xl">Today's overview</h1>
-          <p className="text-sm text-primary-foreground/70">Live transactions across all campus vendors</p>
+          <h1 className="mt-2 font-display text-2xl font-bold sm:text-3xl">Platform overview</h1>
+          <p className="text-sm text-primary-foreground/70">Campus performance, onboarding, and payment attention</p>
         </div>
       </section>
 
       <section className="container space-y-6 py-6">
         <Card className="p-5">
           <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-bold text-navy">
-            <UserPlus className="h-5 w-5 text-forest" /> Invite a campus admin
+            <UserPlus className="h-5 w-5 text-forest" /> Onboard a campus
           </h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Campus admin accounts are invite-only and are scoped to one university.
+            Add the campus details and create an email-bound invitation link for its administrator.
           </p>
-          <form onSubmit={inviteCampusAdmin} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <form onSubmit={inviteCampusAdmin} className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="campus-admin-email">University admin email</Label>
+              <Label htmlFor="campus-name">Campus name</Label>
+              <Input
+                id="campus-name"
+                required
+                maxLength={100}
+                value={campusName}
+                onChange={(event) => setCampusName(event.target.value)}
+                placeholder="Example University"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="campus-domain">Student email domain</Label>
+              <Input
+                id="campus-domain"
+                required
+                maxLength={255}
+                value={campusDomain}
+                onChange={(event) => setCampusDomain(event.target.value)}
+                placeholder="students.example.edu"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="campus-location">Location</Label>
+              <Input
+                id="campus-location"
+                maxLength={200}
+                value={campusLocation}
+                onChange={(event) => setCampusLocation(event.target.value)}
+                placeholder="City, country"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="campus-contact-email">Campus contact email</Label>
+              <Input
+                id="campus-contact-email"
+                type="email"
+                maxLength={255}
+                value={campusContactEmail}
+                onChange={(event) => setCampusContactEmail(event.target.value)}
+                placeholder="contact@example.edu"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="campus-admin-email">Campus admin email (invitation is restricted to this email)</Label>
               <Input
                 id="campus-admin-email"
                 type="email"
                 autoComplete="email"
                 required
-                value={inviteEmail}
-                onChange={(event) => setInviteEmail(event.target.value)}
+                maxLength={255}
+                value={adminEmail}
+                onChange={(event) => setAdminEmail(event.target.value)}
                 placeholder="admin@example.edu"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="campus-admin-university">University</Label>
-              <Select value={inviteUniversity} onValueChange={setInviteUniversity}>
-                <SelectTrigger id="campus-admin-university"><SelectValue placeholder="Select a university" /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(universities).map(([id, university]) => (
-                    <SelectItem key={id} value={id}>{university.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="submit" variant="cta" disabled={inviting}>
+            <Button type="submit" variant="cta" disabled={inviting} className="sm:col-span-2 sm:justify-self-start">
               {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              Send invite
+              Onboard campus & generate invite link
             </Button>
           </form>
+          {inviteUrl && (
+            <div className="mt-4 space-y-2 rounded-lg border bg-muted/30 p-4">
+              <Label htmlFor="campus-admin-invite-link">Campus admin invitation link</Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input id="campus-admin-invite-link" readOnly value={inviteUrl} />
+                <Button type="button" variant="outline" onClick={() => void copyInviteUrl()}>
+                  <Copy className="h-4 w-4" /> Copy link
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Share this one-time link only with the invited email address.</p>
+            </div>
+          )}
         </Card>
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -155,22 +258,60 @@ const AdminDashboard = () => {
 
         <Card className="p-5">
           <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold text-navy">
-            <Building2 className="h-5 w-5 text-forest" /> By vendor (today)
+            <Building2 className="h-5 w-5 text-forest" /> Campus performance (all time)
           </h2>
-          {stats.byVendor.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No orders today yet.</p>
+          {stats.byCampus.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No campuses have been onboarded yet.</p>
           ) : (
             <ul className="space-y-2">
-              {stats.byVendor.map((v) => (
-                <li key={v.name} className="flex items-center justify-between rounded-lg bg-muted/40 p-3">
+              {stats.byCampus.map((campus) => (
+                <li key={campus.id} className="flex items-center justify-between rounded-lg bg-muted/40 p-3">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{v.emoji}</span>
                     <div>
-                      <p className="font-semibold text-navy">{v.name}</p>
-                      <p className="text-xs text-muted-foreground">{v.orders} order{v.orders !== 1 && "s"}</p>
+                      <p className="font-semibold text-navy">{campus.name}</p>
+                      <p className="text-xs text-muted-foreground">{campus.orders} order{campus.orders !== 1 && "s"}</p>
                     </div>
                   </div>
-                  <p className="font-bold text-forest">Rs {v.revenue.toFixed(0)}</p>
+                  <p className="font-bold text-forest">Rs {campus.revenue.toFixed(0)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="mb-1 font-display text-lg font-bold text-navy">Needs attention</h2>
+          <p className="mb-4 text-sm text-muted-foreground">Payments from all campuses that are pending or have failed.</p>
+          {needsAttention.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No payments need attention.</p>
+          ) : (
+            <ul className="divide-y">
+              {needsAttention.map((order) => (
+                <li key={order.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div>
+                    <p className="font-medium text-navy">{order.restaurants?.name ?? "Unknown vendor"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {campuses.find((campus) => campus.id === order.restaurants?.university_id)?.name ?? "Unknown campus"}
+                      {" · "}{new Date(order.created_at).toLocaleString()}
+                    </p>
+                    <p className="text-sm font-semibold text-forest">Rs {Number(order.total).toFixed(0)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={order.payment_status === "failed" ? "destructive" : "outline"} className="capitalize">
+                      {order.payment_status}
+                    </Badge>
+                    {order.payment_proof_url && (
+                      <Button asChild size="sm" variant="outline">
+                        <a href={order.payment_proof_url} target="_blank" rel="noopener noreferrer">Receipt</a>
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => void updatePaymentStatus(order.id, "failed")}>
+                      Mark failed
+                    </Button>
+                    <Button size="sm" variant="cta" onClick={() => void updatePaymentStatus(order.id, "paid")}>
+                      Mark paid
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

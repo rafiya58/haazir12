@@ -6,7 +6,7 @@ import VendorApplication from "./VendorApplication";
 import SetCampusAdminPassword from "./SetCampusAdminPassword";
 
 const Index = () => {
-  const { user, loading, roles, roleError } = useAuth();
+  const { user, loading, roles, activeMode, roleError } = useAuth();
 
   if (loading) {
     return (
@@ -32,7 +32,9 @@ const Index = () => {
 
   if (roles.includes("platform_admin")) return <Navigate to="/admin" replace />;
   if (roles.includes("campus_admin")) return <Navigate to="/campus" replace />;
-  if (roles.includes("vendor") && !roles.includes("student")) return <Navigate to="/vendor" replace />;
+  if (roles.includes("vendor") && (!roles.includes("student") || activeMode === "vendor")) {
+    return <Navigate to="/vendor" replace />;
+  }
   if (!roles.includes("student") && !roles.includes("vendor")) {
     return <VendorApplication />;
   }

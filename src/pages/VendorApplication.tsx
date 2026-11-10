@@ -12,7 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { universities } from "@/lib/universities";
+
+interface CampusOption {
+  id: string;
+  name: string;
+}
 
 interface VendorApplicationRecord {
   id: string;
@@ -29,12 +33,28 @@ const VendorApplication = () => {
   const { user, roles, universityIds, refreshRoles } = useAuth();
   const [application, setApplication] = useState<VendorApplicationRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [campuses, setCampuses] = useState<CampusOption[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [universityId, setUniversityId] = useState("");
   const [restaurantName, setRestaurantName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [description, setDescription] = useState("");
   const [cuisine, setCuisine] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const loadCampuses = async () => {
+      const { data, error } = await supabase.from("campus_directory").select("id,name").order("name");
+      if (!active) return;
+      if (error) {
+        toast.error(`Unable to load campuses: ${error.message}`);
+        return;
+      }
+      setCampuses(data ?? []);
+    };
+    void loadCampuses();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -59,7 +79,7 @@ const VendorApplication = () => {
         const metadata = user.user_metadata;
         const vendorUniversity = metadata.vendor_university;
         setUniversityId(
-          typeof vendorUniversity === "string" && vendorUniversity in universities
+        typeof vendorUniversity === "string" && campuses.some((campus) => campus.id === vendorUniversity)
             ? vendorUniversity
             : universityIds[0] ?? "",
         );
@@ -73,7 +93,7 @@ const VendorApplication = () => {
     return () => {
       active = false;
     };
-  }, [user, universityIds]);
+  }, [user, universityIds, campuses]);
 
   if (roles.includes("vendor")) return <Navigate to="/vendor" replace />;
   if (loading) {
@@ -87,7 +107,7 @@ const VendorApplication = () => {
 
   const submitApplication = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!universityId || !(universityId in universities)) {
+    if (!universityId || !campuses.some((campus) => campus.id === universityId)) {
       toast.error("Select the university where your business operates.");
       return;
     }
@@ -158,12 +178,9 @@ const VendorApplication = () => {
               <p className="font-semibold">{application.restaurant_name}</p>
               <p className="text-muted-foreground">Contact: {application.contact_number}</p>
               <p className="text-muted-foreground">
-                {universities[application.university_id as keyof typeof universities]?.name ?? application.university_id}
+                {campuses.find((campus) => campus.id === application.university_id)?.name ?? application.university_id}
                 {" · "}Submitted for review
               </p>
-              <Button className="mt-4" variant="outline" onClick={() => setApplication(null)}>
-                Edit application
-              </Button>
             </div>
           ) : (
             <>
@@ -180,8 +197,8 @@ const VendorApplication = () => {
                   <Select value={universityId} onValueChange={setUniversityId}>
                     <SelectTrigger id="vendor-university"><SelectValue placeholder="Select a university" /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(universities).map(([id, university]) => (
-                        <SelectItem key={id} value={id}>{university.name}</SelectItem>
+                      {campuses.map((campus) => (
+                        <SelectItem key={campus.id} value={campus.id}>{campus.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

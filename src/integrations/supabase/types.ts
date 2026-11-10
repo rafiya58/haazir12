@@ -105,6 +105,7 @@ export type Database = {
           created_at: string
           id: string
           notes: string | null
+          payment_status: "pending" | "paid" | "failed"
           payment_proof_url: string | null
           pickup_code: string
           pickup_time: string | null
@@ -119,6 +120,7 @@ export type Database = {
           created_at?: string
           id?: string
           notes?: string | null
+          payment_status?: "pending" | "paid" | "failed"
           payment_proof_url?: string | null
           pickup_code?: string
           pickup_time?: string | null
@@ -133,6 +135,7 @@ export type Database = {
           created_at?: string
           id?: string
           notes?: string | null
+          payment_status?: "pending" | "paid" | "failed"
           payment_proof_url?: string | null
           pickup_code?: string
           pickup_time?: string | null
@@ -242,18 +245,24 @@ export type Database = {
       }
       universities: {
         Row: {
+          contact_email: string | null
           email_domain: string
           id: string
+          location: string | null
           name: string
         }
         Insert: {
+          contact_email?: string | null
           email_domain: string
           id: string
+          location?: string | null
           name: string
         }
         Update: {
+          contact_email?: string | null
           email_domain?: string
           id?: string
+          location?: string | null
           name?: string
         }
         Relationships: []
@@ -308,7 +317,14 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      campus_directory: {
+        Row: {
+          email_domain: string
+          id: string
+          name: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_user_restaurant: { Args: { _user_id: string }; Returns: string }
@@ -325,6 +341,10 @@ export type Database = {
       }
       review_vendor_application: {
         Args: { _application_id: string; _decision: string; _review_note?: string }
+        Returns: undefined
+      }
+      set_order_payment_status: {
+        Args: { _order_id: string; _payment_status: string }
         Returns: undefined
       }
       submit_vendor_application: {
