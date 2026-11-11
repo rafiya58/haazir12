@@ -27,6 +27,6 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Deploy Supabase Edge Functions
-        run: supabase functions deploy --project-ref aystifcwooplbutaibtx
+        run: supabase functions deploy --project-ref aystifcwooplbutaibtx --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
