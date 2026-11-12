@@ -32,6 +32,7 @@ interface VendorApplication {
   contact_number: string | null;
   description: string | null;
   cuisine: string | null;
+  status: "pending" | "approved_pending_acceptance";
   created_at: string;
   applicant_name: string | null;
   applicant_email: string | null;
@@ -54,6 +55,7 @@ const CampusAdminDashboard = () => {
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!universityId && campusUniversityIds.length > 0) setUniversityId(campusUniversityIds[0]);
@@ -91,9 +93,9 @@ const CampusAdminDashboard = () => {
     ] = await Promise.all([
       supabase
         .from("vendor_applications")
-        .select("id,user_id,university_id,restaurant_name,contact_number,description,cuisine,created_at")
+        .select("id,user_id,university_id,restaurant_name,contact_number,description,cuisine,status,created_at")
         .eq("university_id", universityId)
-        .eq("status", "pending")
+        .in("status", ["pending", "approved_pending_acceptance"])
         .order("created_at", { ascending: true }),
       supabase
         .from("restaurants")
@@ -150,6 +152,33 @@ const CampusAdminDashboard = () => {
     void loadDashboard();
   }, [loadDashboard]);
 
+  const sendVendorInvitation = async (applicationId: string, afterApproval = false) => {
+    setInvitingId(applicationId);
+    try {
+      const { data, error } = await supabase.functions.invoke("invite-vendor", {
+        body: { application_id: applicationId },
+      });
+      if (error || data?.invitation_sent !== true) {
+        const detail = error?.message ?? "The invitation service returned an incomplete response.";
+        toast.error(afterApproval
+          ? `Approval succeeded, but invitation email failed. The application remains awaiting acceptance. ${detail}`
+          : `Invitation email failed. The application remains awaiting acceptance. ${detail}`);
+        return;
+      }
+      toast.success(afterApproval
+        ? "Approval and email sent successfully."
+        : "Invitation email sent successfully.");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unable to send the invitation email.";
+      toast.error(afterApproval
+        ? `Approval succeeded, but invitation email failed. The application remains awaiting acceptance. ${detail}`
+        : `Invitation email failed. The application remains awaiting acceptance. ${detail}`);
+    } finally {
+      setInvitingId(null);
+      await loadDashboard();
+    }
+  };
+
   const review = async (applicationId: string, decision: "approve" | "reject") => {
     setReviewingId(applicationId);
     try {
@@ -162,8 +191,12 @@ const CampusAdminDashboard = () => {
         toast.error(error.message);
         return;
       }
-      toast.success(decision === "approve" ? "Vendor approved for this university." : "Application rejected.");
-      await loadDashboard();
+      if (decision === "approve") {
+        await sendVendorInvitation(applicationId, true);
+      } else {
+        toast.success("Application rejected.");
+        await loadDashboard();
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to review this application.");
     } finally {
@@ -248,35 +281,52 @@ const CampusAdminDashboard = () => {
                         {application.cuisine && ` · ${application.cuisine}`}
                       </p>
                     </div>
-                    <Badge variant="outline">Pending</Badge>
+                    <Badge variant="outline">
+                      {application.status === "pending" ? "Pending" : "Approved · awaiting acceptance"}
+                    </Badge>
                   </div>
                   {application.description && <p className="text-sm">{application.description}</p>}
-                  <div className="space-y-2">
-                    <Label htmlFor={`review-${application.id}`}>Decision note (optional)</Label>
-                    <Textarea
-                      id={`review-${application.id}`}
-                      value={reviewNotes[application.id] ?? ""}
-                      onChange={(event) => setReviewNotes((current) => ({ ...current, [application.id]: event.target.value }))}
-                      maxLength={500}
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      disabled={reviewingId === application.id}
-                      onClick={() => void review(application.id, "reject")}
-                    >
-                      Reject
-                    </Button>
-                    <Button
-                      variant="cta"
-                      disabled={reviewingId === application.id}
-                      onClick={() => void review(application.id, "approve")}
-                    >
-                      {reviewingId === application.id && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Approve vendor
-                    </Button>
-                  </div>
+                  {application.status === "pending" ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor={`review-${application.id}`}>Decision note (optional)</Label>
+                        <Textarea
+                          id={`review-${application.id}`}
+                          value={reviewNotes[application.id] ?? ""}
+                          onChange={(event) => setReviewNotes((current) => ({ ...current, [application.id]: event.target.value }))}
+                          maxLength={500}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          disabled={reviewingId === application.id || invitingId !== null}
+                          onClick={() => void review(application.id, "reject")}
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          variant="cta"
+                          disabled={reviewingId === application.id || invitingId !== null}
+                          onClick={() => void review(application.id, "approve")}
+                        >
+                          {(reviewingId === application.id || invitingId === application.id) && <Loader2 className="h-4 w-4 animate-spin" />}
+                          Approve vendor
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="cta"
+                        disabled={reviewingId === application.id || invitingId !== null}
+                        onClick={() => void sendVendorInvitation(application.id)}
+                      >
+                        {invitingId === application.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Resend invitation
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               ))}
             </section>

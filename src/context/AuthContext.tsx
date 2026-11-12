@@ -16,8 +16,9 @@ interface AuthContextValue {
   universityIds: string[];
   campusUniversityIds: string[];
   signOut: () => Promise<void>;
-  refreshRoles: () => Promise<void>;
+  refreshRoles: () => Promise<{ success: boolean; roles: AppRole[] }>;
   switchMode: () => AccountMode;
+  activateVendorMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -38,7 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setActiveMode(roles.includes("vendor") && !roles.includes("student") ? "vendor" : "student");
   }, [activeMode, roles]);
 
-  const loadRoles = async (userId: string) => {
+  const loadRoles = async (userId: string): Promise<{ success: boolean; roles: AppRole[] }> => {
     const { data, error } = await supabase
       .from("user_roles")
       .select("role, restaurant_id, university_id")
@@ -50,10 +51,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setRestaurantId(null);
       setUniversityIds([]);
       setCampusUniversityIds([]);
-      return;
+      return { success: false, roles: [] };
     }
     setRoleError(null);
-    setRoles(data.map((r) => r.role as AppRole));
+    const loadedRoles = data.map((r) => r.role as AppRole);
+    setRoles(loadedRoles);
     const vendor = data.find((r) => r.role === "vendor");
     setRestaurantId(vendor?.restaurant_id ?? null);
     setUniversityIds(
@@ -64,6 +66,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         role.role === "campus_admin" && role.university_id ? [role.university_id] : [],
       ))],
     );
+    return { success: true, roles: loadedRoles };
   };
 
   useEffect(() => {
@@ -105,8 +108,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
   };
 
-  const refreshRoles = async () => {
-    if (user) await loadRoles(user.id);
+  const refreshRoles = async (): Promise<{ success: boolean; roles: AppRole[] }> => {
+    if (!user) return { success: false, roles: [] };
+    return loadRoles(user.id);
   };
 
   const switchMode = () => {
@@ -115,8 +119,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return nextMode;
   };
 
+  const activateVendorMode = () => setActiveMode("vendor");
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, roles, activeMode, roleError, restaurantId, universityIds, campusUniversityIds, signOut, refreshRoles, switchMode }}>
+    <AuthContext.Provider value={{ user, session, loading, roles, activeMode, roleError, restaurantId, universityIds, campusUniversityIds, signOut, refreshRoles, switchMode, activateVendorMode }}>
       {children}
     </AuthContext.Provider>
   );
