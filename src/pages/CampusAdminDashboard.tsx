@@ -5,6 +5,7 @@ import { TopBar } from "@/components/TopBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +33,7 @@ interface VendorApplication {
   contact_number: string | null;
   description: string | null;
   cuisine: string | null;
+  status: "pending" | "approved_pending_acceptance";
   created_at: string;
   applicant_name: string | null;
   applicant_email: string | null;
@@ -54,6 +56,14 @@ const CampusAdminDashboard = () => {
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [directInviting, setDirectInviting] = useState(false);
+  const [directVendorName, setDirectVendorName] = useState("");
+  const [directVendorEmail, setDirectVendorEmail] = useState("");
+  const [directRestaurantName, setDirectRestaurantName] = useState("");
+  const [directContactNumber, setDirectContactNumber] = useState("");
+  const [directDescription, setDirectDescription] = useState("");
+  const [directCuisine, setDirectCuisine] = useState("");
 
   useEffect(() => {
     if (!universityId && campusUniversityIds.length > 0) setUniversityId(campusUniversityIds[0]);
@@ -91,9 +101,9 @@ const CampusAdminDashboard = () => {
     ] = await Promise.all([
       supabase
         .from("vendor_applications")
-        .select("id,user_id,university_id,restaurant_name,contact_number,description,cuisine,created_at")
+        .select("id,user_id,university_id,restaurant_name,contact_number,description,cuisine,status,created_at")
         .eq("university_id", universityId)
-        .eq("status", "pending")
+        .in("status", ["pending", "approved_pending_acceptance"])
         .order("created_at", { ascending: true }),
       supabase
         .from("restaurants")
@@ -150,6 +160,75 @@ const CampusAdminDashboard = () => {
     void loadDashboard();
   }, [loadDashboard]);
 
+  const inviteNewVendor = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!universityId || !campusUniversityIds.includes(universityId)) {
+      toast.error("Select a campus you administer.");
+      return;
+    }
+
+    setDirectInviting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("invite-campus-vendor", {
+        body: {
+          university_id: universityId,
+          full_name: directVendorName.trim(),
+          email: directVendorEmail.trim().toLowerCase(),
+          restaurant_name: directRestaurantName.trim(),
+          contact_number: directContactNumber.trim(),
+          description: directDescription.trim(),
+          cuisine: directCuisine.trim(),
+        },
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      if (data?.invited !== true) {
+        toast.error("The vendor invitation response was incomplete.");
+        return;
+      }
+      toast.success(`Vendor invitation sent to ${directVendorEmail.trim().toLowerCase()}.`);
+      setDirectVendorName("");
+      setDirectVendorEmail("");
+      setDirectRestaurantName("");
+      setDirectContactNumber("");
+      setDirectDescription("");
+      setDirectCuisine("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send the vendor invitation.");
+    } finally {
+      setDirectInviting(false);
+    }
+  };
+
+  const sendVendorInvitation = async (applicationId: string, afterApproval = false) => {
+    setInvitingId(applicationId);
+    try {
+      const { data, error } = await supabase.functions.invoke("invite-vendor", {
+        body: { application_id: applicationId },
+      });
+      if (error || data?.invitation_sent !== true) {
+        const detail = error?.message ?? "The invitation service returned an incomplete response.";
+        toast.error(afterApproval
+          ? `Approval succeeded, but invitation email failed. The application remains awaiting acceptance. ${detail}`
+          : `Invitation email failed. The application remains awaiting acceptance. ${detail}`);
+        return;
+      }
+      toast.success(afterApproval
+        ? "Approval and email sent successfully."
+        : "Invitation email sent successfully.");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unable to send the invitation email.";
+      toast.error(afterApproval
+        ? `Approval succeeded, but invitation email failed. The application remains awaiting acceptance. ${detail}`
+        : `Invitation email failed. The application remains awaiting acceptance. ${detail}`);
+    } finally {
+      setInvitingId(null);
+      await loadDashboard();
+    }
+  };
+
   const review = async (applicationId: string, decision: "approve" | "reject") => {
     setReviewingId(applicationId);
     try {
@@ -162,8 +241,12 @@ const CampusAdminDashboard = () => {
         toast.error(error.message);
         return;
       }
-      toast.success(decision === "approve" ? "Vendor approved for this university." : "Application rejected.");
-      await loadDashboard();
+      if (decision === "approve") {
+        await sendVendorInvitation(applicationId, true);
+      } else {
+        toast.success("Application rejected.");
+        await loadDashboard();
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to review this application.");
     } finally {
@@ -227,6 +310,45 @@ const CampusAdminDashboard = () => {
               <StatCard icon={University} label="Pending payments" value={pendingPayments.toString()} />
             </section>
 
+            <Card className="space-y-4 p-5">
+              <div>
+                <h2 className="font-display text-lg font-bold text-navy">Invite a new vendor</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Create a new vendor account for {universityName}. The vendor will set a password from the invitation email.
+                </p>
+              </div>
+              <form onSubmit={inviteNewVendor} className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="direct-vendor-name">Vendor name</Label>
+                  <Input id="direct-vendor-name" value={directVendorName} onChange={(event) => setDirectVendorName(event.target.value)} maxLength={80} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direct-vendor-email">Email</Label>
+                  <Input id="direct-vendor-email" type="email" autoComplete="email" value={directVendorEmail} onChange={(event) => setDirectVendorEmail(event.target.value)} maxLength={255} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direct-restaurant-name">Business name</Label>
+                  <Input id="direct-restaurant-name" value={directRestaurantName} onChange={(event) => setDirectRestaurantName(event.target.value)} maxLength={100} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direct-vendor-contact">Contact number</Label>
+                  <Input id="direct-vendor-contact" type="tel" autoComplete="tel" value={directContactNumber} onChange={(event) => setDirectContactNumber(event.target.value)} maxLength={25} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direct-vendor-cuisine">Cuisine or business type</Label>
+                  <Input id="direct-vendor-cuisine" value={directCuisine} onChange={(event) => setDirectCuisine(event.target.value)} maxLength={100} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="direct-vendor-description">Business description</Label>
+                  <Textarea id="direct-vendor-description" value={directDescription} onChange={(event) => setDirectDescription(event.target.value)} maxLength={1000} required />
+                </div>
+                <Button type="submit" variant="cta" className="sm:col-span-2 sm:justify-self-start" disabled={directInviting || !universityId}>
+                  {directInviting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Send vendor invitation
+                </Button>
+              </form>
+            </Card>
+
             <section className="space-y-3">
               <h2 className="font-display text-lg font-bold text-navy">Approval required</h2>
               {applications.length === 0 ? (
@@ -248,35 +370,52 @@ const CampusAdminDashboard = () => {
                         {application.cuisine && ` · ${application.cuisine}`}
                       </p>
                     </div>
-                    <Badge variant="outline">Pending</Badge>
+                    <Badge variant="outline">
+                      {application.status === "pending" ? "Pending" : "Approved · awaiting acceptance"}
+                    </Badge>
                   </div>
                   {application.description && <p className="text-sm">{application.description}</p>}
-                  <div className="space-y-2">
-                    <Label htmlFor={`review-${application.id}`}>Decision note (optional)</Label>
-                    <Textarea
-                      id={`review-${application.id}`}
-                      value={reviewNotes[application.id] ?? ""}
-                      onChange={(event) => setReviewNotes((current) => ({ ...current, [application.id]: event.target.value }))}
-                      maxLength={500}
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      disabled={reviewingId === application.id}
-                      onClick={() => void review(application.id, "reject")}
-                    >
-                      Reject
-                    </Button>
-                    <Button
-                      variant="cta"
-                      disabled={reviewingId === application.id}
-                      onClick={() => void review(application.id, "approve")}
-                    >
-                      {reviewingId === application.id && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Approve vendor
-                    </Button>
-                  </div>
+                  {application.status === "pending" ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor={`review-${application.id}`}>Decision note (optional)</Label>
+                        <Textarea
+                          id={`review-${application.id}`}
+                          value={reviewNotes[application.id] ?? ""}
+                          onChange={(event) => setReviewNotes((current) => ({ ...current, [application.id]: event.target.value }))}
+                          maxLength={500}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          disabled={reviewingId === application.id || invitingId !== null}
+                          onClick={() => void review(application.id, "reject")}
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          variant="cta"
+                          disabled={reviewingId === application.id || invitingId !== null}
+                          onClick={() => void review(application.id, "approve")}
+                        >
+                          {(reviewingId === application.id || invitingId === application.id) && <Loader2 className="h-4 w-4 animate-spin" />}
+                          Approve vendor
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="cta"
+                        disabled={reviewingId === application.id || invitingId !== null}
+                        onClick={() => void sendVendorInvitation(application.id)}
+                      >
+                        {invitingId === application.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Resend invitation
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               ))}
             </section>

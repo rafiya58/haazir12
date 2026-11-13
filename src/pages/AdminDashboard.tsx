@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp, ShoppingBag, DollarSign, Building2, UserPlus, Copy, type LucideIcon } from "lucide-react";
+import { Loader2, TrendingUp, ShoppingBag, DollarSign, Building2, UserPlus, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 interface OrderRow {
@@ -32,7 +32,6 @@ const AdminDashboard = () => {
   const [campusLocation, setCampusLocation] = useState("");
   const [campusContactEmail, setCampusContactEmail] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
-  const [inviteUrl, setInviteUrl] = useState("");
   const [inviting, setInviting] = useState(false);
 
   const inviteCampusAdmin = async (event: FormEvent<HTMLFormElement>) => {
@@ -52,17 +51,17 @@ const AdminDashboard = () => {
         toast.error(error.message);
         return;
       }
-      if (typeof data?.invite_url !== "string" || typeof data?.campus_id !== "string") {
-        toast.error("Campus was onboarded, but the invitation link was not returned.");
+      if (typeof data?.campus_id !== "string") {
+        toast.error("The campus was created, but the invitation response was incomplete.");
         return;
       }
-      setInviteUrl(data.invite_url);
+      const invitedEmail = adminEmail.trim().toLowerCase();
       setCampusName("");
       setCampusDomain("");
       setCampusLocation("");
       setCampusContactEmail("");
       setAdminEmail("");
-      toast.success("Campus onboarded. Copy and share the admin invitation link.");
+      toast.success(`Campus onboarded. Invitation email sent to ${invitedEmail}.`);
       await loadDashboard();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to onboard the campus or generate its admin invitation.");
@@ -137,15 +136,6 @@ const AdminDashboard = () => {
     await loadDashboard();
   };
 
-  const copyInviteUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      toast.success("Invitation link copied.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to copy the invitation link.");
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -172,7 +162,7 @@ const AdminDashboard = () => {
             <UserPlus className="h-5 w-5 text-forest" /> Onboard a campus
           </h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Add the campus details and create an email-bound invitation link for its administrator.
+            Add the campus details and send an email invitation to its administrator.
           </p>
           <form onSubmit={inviteCampusAdmin} className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
@@ -233,21 +223,9 @@ const AdminDashboard = () => {
             </div>
             <Button type="submit" variant="cta" disabled={inviting} className="sm:col-span-2 sm:justify-self-start">
               {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              Onboard campus & generate invite link
+              Onboard campus & send invitation
             </Button>
           </form>
-          {inviteUrl && (
-            <div className="mt-4 space-y-2 rounded-lg border bg-muted/30 p-4">
-              <Label htmlFor="campus-admin-invite-link">Campus admin invitation link</Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input id="campus-admin-invite-link" readOnly value={inviteUrl} />
-                <Button type="button" variant="outline" onClick={() => void copyInviteUrl()}>
-                  <Copy className="h-4 w-4" /> Copy link
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Share this one-time link only with the invited email address.</p>
-            </div>
-          )}
         </Card>
 
         <div className="grid gap-3 sm:grid-cols-3">

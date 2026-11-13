@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,8 +17,22 @@ import VendorApplication from "./pages/VendorApplication.tsx";
 import VendorDashboard from "./pages/VendorDashboard.tsx";
 import CampusAdminDashboard from "./pages/CampusAdminDashboard.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
+import SetCampusAdminPassword from "./pages/SetCampusAdminPassword.tsx";
+import JoinVendor from "./pages/JoinVendor.tsx";
+import SetVendorPassword from "./pages/SetVendorPassword.tsx";
 
 const queryClient = new QueryClient();
+
+const RootRoute = () => {
+  const location = useLocation();
+  const query = new URLSearchParams(location.search);
+
+  if (query.has("token_hash") && query.get("type") === "invite") {
+    return <Navigate to={{ pathname: "/set-password", search: location.search, hash: location.hash }} replace />;
+  }
+
+  return <Index />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -30,7 +44,10 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/" element={<Index />} />
+            <Route path="/set-password" element={<SetCampusAdminPassword />} />
+            <Route path="/set-vendor-password" element={<SetVendorPassword />} />
+            <Route path="/join-vendor" element={<JoinVendor />} />
+            <Route path="/" element={<RootRoute />} />
             <Route path="/restaurant/:slug" element={<RequireAuth requireRole="student"><RestaurantMenu /></RequireAuth>} />
             <Route path="/cart" element={<RequireAuth requireRole="student"><Cart /></RequireAuth>} />
             <Route path="/order/:id" element={<RequireAuth requireRole="student"><OrderConfirmation /></RequireAuth>} />

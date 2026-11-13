@@ -25,7 +25,7 @@ interface VendorApplicationRecord {
   contact_number: string | null;
   description: string | null;
   cuisine: string | null;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved_pending_acceptance" | "approved" | "rejected";
   review_note: string | null;
 }
 
@@ -161,14 +161,21 @@ const VendorApplication = () => {
             <Store className="mt-1 h-6 w-6 text-forest" />
             <div>
               <Badge variant={application?.status === "rejected" ? "destructive" : "secondary"}>
-                {application ? application.status : "Vendor application"}
+                {application?.status === "approved_pending_acceptance"
+                  ? "Approved · invitation pending"
+                  : application ? application.status : "Vendor application"}
               </Badge>
               <h1 className="mt-2 font-display text-2xl font-bold text-navy">
-                {application?.status === "pending" ? "Waiting for university approval" : "Apply to become a vendor"}
+                {application?.status === "pending"
+                  ? "Waiting for university approval"
+                  : application?.status === "approved_pending_acceptance"
+                    ? "Your application was approved"
+                    : "Apply to become a vendor"}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Your vendor role will be added to this account after approval. If you already order as a student,
-                both roles remain on the same account.
+                {application?.status === "approved_pending_acceptance"
+                  ? "Your Join as Vendor invitation is awaiting acceptance. Open the link sent to your existing account email, then sign in to activate vendor access."
+                  : "Your vendor role will be added to this account after approval. If you already order as a student, both roles remain on the same account."}
               </p>
             </div>
           </div>
@@ -180,6 +187,17 @@ const VendorApplication = () => {
               <p className="text-muted-foreground">
                 {campuses.find((campus) => campus.id === application.university_id)?.name ?? application.university_id}
                 {" · "}Submitted for review
+              </p>
+            </div>
+          ) : application?.status === "approved_pending_acceptance" ? (
+            <div className="rounded-lg bg-muted/50 p-4 text-sm">
+              <p className="font-semibold">{application.restaurant_name}</p>
+              <p className="text-muted-foreground">
+                {campuses.find((campus) => campus.id === application.university_id)?.name ?? application.university_id}
+                {" · "}Approved; invitation awaiting acceptance
+              </p>
+              <p className="mt-2 text-muted-foreground">
+                If you can’t find the invitation email, contact your Campus Admin to resend it.
               </p>
             </div>
           ) : (

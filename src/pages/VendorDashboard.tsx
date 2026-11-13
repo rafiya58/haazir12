@@ -34,6 +34,7 @@ const VendorDashboard = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [restaurantName, setRestaurantName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [menuError, setMenuError] = useState<string | null>(null);
   const [verifyCode, setVerifyCode] = useState("");
   const [newItemName, setNewItemName] = useState("");
   const [newItemPrice, setNewItemPrice] = useState("");
@@ -56,13 +57,20 @@ const VendorDashboard = () => {
   useEffect(() => {
     if (!restaurantId) { setLoading(false); return; }
     const load = async () => {
-      const [{ data: r }, { data: m }, { data: o }] = await Promise.all([
+      const [{ data: r }, { data: m, error: menuLoadError }, { data: o }] = await Promise.all([
         supabase.from("restaurants").select("name").eq("id", restaurantId).maybeSingle(),
         supabase.from("menu_items").select("*").eq("restaurant_id", restaurantId).order("category").order("name"),
         supabase.from("orders").select("*, order_items(*)").eq("restaurant_id", restaurantId).order("pickup_time", { ascending: true, nullsFirst: false }),
       ]);
       setRestaurantName(r?.name ?? "Vendor");
-      setMenu((m as MenuItem[]) ?? []);
+      if (menuLoadError) {
+        console.error("Unable to load vendor menu:", menuLoadError.message);
+        setMenuError("Menu items could not be loaded. Please refresh and try again.");
+        setMenu([]);
+      } else {
+        setMenuError(null);
+        setMenu((m as MenuItem[]) ?? []);
+      }
       setOrders((o as unknown as Order[]) ?? []);
       setLoading(false);
     };
@@ -166,6 +174,7 @@ const VendorDashboard = () => {
       if (error) throw error;
 
       setMenu((current) => [...current, item].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)));
+      setMenuError(null);
       setNewItemName("");
       setNewItemPrice("");
       setNewItemCategory("Mains");
@@ -367,10 +376,13 @@ const VendorDashboard = () => {
               </form>
             </Card>
 
-            {menu.length === 0 ? (
-              <Card className="p-8 text-center text-sm text-muted-foreground">Your menu is empty. Add your first item above.</Card>
-            ) : null}
-            {menu.map((item) => (
+            {menuError ? (
+              <Card className="p-10 text-center text-sm text-muted-foreground">{menuError}</Card>
+            ) : menu.length === 0 ? (
+              <Card className="p-10 text-center text-sm text-muted-foreground">
+                No menu items have been added to this restaurant yet. Add your first item above.
+              </Card>
+            ) : menu.map((item) => (
               <Card key={item.id} className="flex flex-wrap items-center gap-3 p-4">
                 {item.image_url && <img src={item.image_url} alt={item.name} className="h-14 w-14 rounded-lg object-cover" />}
                 <div className="min-w-0 flex-1">
@@ -382,6 +394,7 @@ const VendorDashboard = () => {
                   <span className="text-xs text-muted-foreground">Rs</span>
                   <Input type="number" defaultValue={Number(item.price)} min={0} step="1"
                     onBlur={(e) => updatePrice(item, e.target.value)}
+                    aria-label={`Price for ${item.name}`}
                     className="w-24 h-9" />
                 </div>
                 <div className="flex items-center gap-2">
