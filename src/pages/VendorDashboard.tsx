@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { TopBar } from "@/components/TopBar";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,10 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck, Clock, Receipt } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import imageCompression from "browser-image-compression";
+import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck, Clock, Receipt, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-interface MenuItem { id: string; name: string; description: string | null; price: number; category: string; is_available: boolean; restaurant_id: string; }
+interface MenuItem { id: string; name: string; description: string | null; image_url: string | null; price: number; category: string; is_available: boolean; restaurant_id: string; }
 interface OrderItem { id: string; item_name: string; quantity: number; unit_price: number; }
 interface Order {
   id: string; status: string; total: number; pickup_code: string; notes: string | null; created_at: string;
@@ -23,14 +26,32 @@ interface Order {
 }
 
 const ACTIVE_STATUSES = ["pending", "preparing", "ready"];
+const MENU_ITEM_IMAGES_BUCKET = "menu-item-images";
 
 const VendorDashboard = () => {
-  const { restaurantId } = useAuth();
+  const { restaurantId, user } = useAuth();
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [restaurantName, setRestaurantName] = useState("");
   const [loading, setLoading] = useState(true);
   const [verifyCode, setVerifyCode] = useState("");
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemPrice, setNewItemPrice] = useState("");
+  const [newItemCategory, setNewItemCategory] = useState("Mains");
+  const [newItemDescription, setNewItemDescription] = useState("");
+  const [newItemImage, setNewItemImage] = useState<File | null>(null);
+  const [addingItem, setAddingItem] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!newItemImage) {
+      setImagePreview(null);
+      return;
+    }
+    const previewUrl = URL.createObjectURL(newItemImage);
+    setImagePreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [newItemImage]);
 
   useEffect(() => {
     if (!restaurantId) { setLoading(false); return; }
@@ -77,6 +98,92 @@ const VendorDashboard = () => {
     const { error } = await supabase.from("menu_items").update({ price }).eq("id", item.id);
     if (error) toast.error(error.message);
     else toast.success(`Price updated`);
+  };
+
+  const selectMenuImage = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      event.currentTarget.value = "";
+      return;
+    }
+    setNewItemImage(file);
+  };
+
+  const addMenuItem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!restaurantId || !user) {
+      toast.error("Your vendor account is not ready to add menu items");
+      return;
+    }
+
+    const name = newItemName.trim();
+    const price = Number(newItemPrice);
+    if (!name) {
+      toast.error("Enter an item name");
+      return;
+    }
+    if (newItemPrice.trim() === "" || !Number.isFinite(price) || price < 0) {
+      toast.error("Enter a valid price");
+      return;
+    }
+
+    setAddingItem(true);
+    let uploadedImagePath: string | null = null;
+    try {
+      let imageUrl: string | null = null;
+      if (newItemImage) {
+        const compressedImage = await imageCompression(newItemImage, {
+          maxSizeMB: 0.3,
+          maxWidthOrHeight: 640,
+          useWebWorker: true,
+          fileType: "image/jpeg",
+        });
+        const imagePath = `${restaurantId}/${user.id}/${crypto.randomUUID()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from(MENU_ITEM_IMAGES_BUCKET)
+          .upload(imagePath, compressedImage, { upsert: false, contentType: "image/jpeg" });
+        if (uploadError) throw uploadError;
+
+        uploadedImagePath = imagePath;
+        imageUrl = supabase.storage.from(MENU_ITEM_IMAGES_BUCKET).getPublicUrl(imagePath).data.publicUrl;
+      }
+
+      const { data: item, error } = await supabase
+        .from("menu_items")
+        .insert({
+          restaurant_id: restaurantId,
+          name,
+          price,
+          category: newItemCategory.trim() || "Mains",
+          description: newItemDescription.trim() || null,
+          image_url: imageUrl,
+        })
+        .select("*")
+        .single();
+      if (error) throw error;
+
+      setMenu((current) => [...current, item].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)));
+      setNewItemName("");
+      setNewItemPrice("");
+      setNewItemCategory("Mains");
+      setNewItemDescription("");
+      setNewItemImage(null);
+      form.reset();
+      toast.success(`${item.name} added to your menu`);
+    } catch (error) {
+      if (uploadedImagePath) {
+        const { error: cleanupError } = await supabase.storage
+          .from(MENU_ITEM_IMAGES_BUCKET)
+          .remove([uploadedImagePath]);
+        if (cleanupError) toast.error(`Could not clean up the uploaded image: ${cleanupError.message}`);
+      }
+      toast.error(error instanceof Error ? error.message : "Could not add menu item");
+    } finally {
+      setAddingItem(false);
+    }
   };
 
   const updateOrderStatus = async (id: string, status: "pending" | "preparing" | "ready" | "completed" | "cancelled") => {
@@ -226,11 +333,50 @@ const VendorDashboard = () => {
           </TabsContent>
 
           <TabsContent value="menu" className="mt-5 space-y-3">
+            <Card className="p-4 sm:p-5">
+              <h2 className="font-display text-lg font-bold text-navy">Add a menu item</h2>
+              <p className="mb-4 text-sm text-muted-foreground">Add an item and its price. Description and photo are optional.</p>
+              <form onSubmit={addMenuItem} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="menu-item-name">Item name</Label>
+                    <Input id="menu-item-name" value={newItemName} onChange={(event) => setNewItemName(event.target.value)} placeholder="e.g. Chicken wrap" required maxLength={100} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="menu-item-price">Price (Rs)</Label>
+                    <Input id="menu-item-price" type="number" value={newItemPrice} onChange={(event) => setNewItemPrice(event.target.value)} placeholder="e.g. 350" min={0} step="0.01" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="menu-item-category">Category</Label>
+                    <Input id="menu-item-category" value={newItemCategory} onChange={(event) => setNewItemCategory(event.target.value)} placeholder="Mains" maxLength={50} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="menu-item-image">Photo (optional)</Label>
+                    <Input id="menu-item-image" type="file" accept="image/*" onChange={selectMenuImage} />
+                    {imagePreview && <img src={imagePreview} alt="Menu item preview" className="h-16 w-16 rounded-lg object-cover" />}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="menu-item-description">Description (optional)</Label>
+                  <Textarea id="menu-item-description" value={newItemDescription} onChange={(event) => setNewItemDescription(event.target.value)} placeholder="Tell customers what's in this item" rows={3} maxLength={500} />
+                </div>
+                <Button type="submit" variant="cta" disabled={addingItem}>
+                  {addingItem ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {addingItem ? "Adding item..." : "Add menu item"}
+                </Button>
+              </form>
+            </Card>
+
+            {menu.length === 0 ? (
+              <Card className="p-8 text-center text-sm text-muted-foreground">Your menu is empty. Add your first item above.</Card>
+            ) : null}
             {menu.map((item) => (
               <Card key={item.id} className="flex flex-wrap items-center gap-3 p-4">
+                {item.image_url && <img src={item.image_url} alt={item.name} className="h-14 w-14 rounded-lg object-cover" />}
                 <div className="min-w-0 flex-1">
                   <p className={`font-semibold ${item.is_available ? "text-navy" : "text-muted-foreground line-through"}`}>{item.name}</p>
                   <p className="text-xs text-muted-foreground">{item.category}</p>
+                  {item.description && <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">Rs</span>

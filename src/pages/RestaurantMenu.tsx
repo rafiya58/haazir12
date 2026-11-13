@@ -14,7 +14,7 @@ interface Restaurant {
   id: string; name: string; slug: string; emoji: string | null; cuisine: string | null; is_open: boolean;
 }
 interface MenuItem {
-  id: string; name: string; description: string | null; price: number; category: string; is_available: boolean; restaurant_id: string;
+  id: string; name: string; description: string | null; image_url: string | null; price: number; category: string; is_available: boolean; restaurant_id: string;
 }
 
 const RestaurantMenu = () => {
@@ -156,10 +156,13 @@ const RestaurantMenu = () => {
                 return (
                   <Card
                     key={item.id}
-                    className={`flex items-center justify-between gap-4 p-4 transition-all ${
+                    className={`flex items-center gap-4 p-4 transition-all ${
                       unavailable ? "opacity-50 grayscale" : "hover:shadow-card"
                     }`}
                   >
+                    {item.image_url && (
+                      <img src={item.image_url} alt={item.name} className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <h3 className="truncate font-semibold text-navy">{item.name}</h3>
