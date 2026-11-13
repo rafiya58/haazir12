@@ -56,6 +56,13 @@ const CampusAdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [directInviting, setDirectInviting] = useState(false);
+  const [directVendorName, setDirectVendorName] = useState("");
+  const [directVendorEmail, setDirectVendorEmail] = useState("");
+  const [directRestaurantName, setDirectRestaurantName] = useState("");
+  const [directContactNumber, setDirectContactNumber] = useState("");
+  const [directDescription, setDirectDescription] = useState("");
+  const [directCuisine, setDirectCuisine] = useState("");
 
   useEffect(() => {
     if (!universityId && campusUniversityIds.length > 0) setUniversityId(campusUniversityIds[0]);
@@ -151,6 +158,48 @@ const CampusAdminDashboard = () => {
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  const inviteNewVendor = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!universityId || !campusUniversityIds.includes(universityId)) {
+      toast.error("Select a campus you administer.");
+      return;
+    }
+
+    setDirectInviting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("invite-campus-vendor", {
+        body: {
+          university_id: universityId,
+          full_name: directVendorName.trim(),
+          email: directVendorEmail.trim().toLowerCase(),
+          restaurant_name: directRestaurantName.trim(),
+          contact_number: directContactNumber.trim(),
+          description: directDescription.trim(),
+          cuisine: directCuisine.trim(),
+        },
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      if (data?.invited !== true) {
+        toast.error("The vendor invitation response was incomplete.");
+        return;
+      }
+      toast.success(`Vendor invitation sent to ${directVendorEmail.trim().toLowerCase()}.`);
+      setDirectVendorName("");
+      setDirectVendorEmail("");
+      setDirectRestaurantName("");
+      setDirectContactNumber("");
+      setDirectDescription("");
+      setDirectCuisine("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send the vendor invitation.");
+    } finally {
+      setDirectInviting(false);
+    }
+  };
 
   const sendVendorInvitation = async (applicationId: string, afterApproval = false) => {
     setInvitingId(applicationId);
@@ -259,6 +308,45 @@ const CampusAdminDashboard = () => {
               <StatCard icon={DollarSign} label="Revenue" value={`Rs ${revenue.toFixed(0)}`} />
               <StatCard icon={University} label="Pending payments" value={pendingPayments.toString()} />
             </section>
+
+            <Card className="space-y-4 p-5">
+              <div>
+                <h2 className="font-display text-lg font-bold text-navy">Invite a new vendor</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Create a new vendor account for {universityName}. The vendor will set a password from the invitation email.
+                </p>
+              </div>
+              <form onSubmit={inviteNewVendor} className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="direct-vendor-name">Vendor name</Label>
+                  <Input id="direct-vendor-name" value={directVendorName} onChange={(event) => setDirectVendorName(event.target.value)} maxLength={80} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direct-vendor-email">Email</Label>
+                  <Input id="direct-vendor-email" type="email" autoComplete="email" value={directVendorEmail} onChange={(event) => setDirectVendorEmail(event.target.value)} maxLength={255} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direct-restaurant-name">Business name</Label>
+                  <Input id="direct-restaurant-name" value={directRestaurantName} onChange={(event) => setDirectRestaurantName(event.target.value)} maxLength={100} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direct-vendor-contact">Contact number</Label>
+                  <Input id="direct-vendor-contact" type="tel" autoComplete="tel" value={directContactNumber} onChange={(event) => setDirectContactNumber(event.target.value)} maxLength={25} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="direct-vendor-cuisine">Cuisine or business type</Label>
+                  <Input id="direct-vendor-cuisine" value={directCuisine} onChange={(event) => setDirectCuisine(event.target.value)} maxLength={100} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="direct-vendor-description">Business description</Label>
+                  <Textarea id="direct-vendor-description" value={directDescription} onChange={(event) => setDirectDescription(event.target.value)} maxLength={1000} required />
+                </div>
+                <Button type="submit" variant="cta" className="sm:col-span-2 sm:justify-self-start" disabled={directInviting || !universityId}>
+                  {directInviting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Send vendor invitation
+                </Button>
+              </form>
+            </Card>
 
             <section className="space-y-3">
               <h2 className="font-display text-lg font-bold text-navy">Approval required</h2>

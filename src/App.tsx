@@ -19,6 +19,7 @@ import CampusAdminDashboard from "./pages/CampusAdminDashboard.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
 import SetCampusAdminPassword from "./pages/SetCampusAdminPassword.tsx";
 import JoinVendor from "./pages/JoinVendor.tsx";
+import SetVendorPassword from "./pages/SetVendorPassword.tsx";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/set-password" element={<SetCampusAdminPassword />} />
+            <Route path="/set-vendor-password" element={<SetVendorPassword />} />
             <Route path="/join-vendor" element={<JoinVendor />} />
             <Route path="/" element={<RootRoute />} />
             <Route path="/restaurant/:slug" element={<RequireAuth requireRole="student"><RestaurantMenu /></RequireAuth>} />

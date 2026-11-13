@@ -1,5 +1,11 @@
+{{ if eq .Data.account_type "direct_vendor_invitation" }}
+<h2>You're invited to join Haazir as a vendor</h2>
+<p>A Campus Admin has invited you to create a new vendor account for their campus.</p>
+<p>Accept the invitation to verify your email and set a password for your new account.</p>
+{{ else }}
 <h2>You're invited to become a Haazir campus admin</h2>
 <p>A Platform Admin has invited you to manage a campus on Haazir.</p>
+{{ end }}
 <p>
   <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=invite">
     Accept invitation
