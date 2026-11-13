@@ -30,18 +30,26 @@ const VendorDashboard = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [restaurantName, setRestaurantName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [menuError, setMenuError] = useState<string | null>(null);
   const [verifyCode, setVerifyCode] = useState("");
 
   useEffect(() => {
     if (!restaurantId) { setLoading(false); return; }
     const load = async () => {
-      const [{ data: r }, { data: m }, { data: o }] = await Promise.all([
+      const [{ data: r }, { data: m, error: menuLoadError }, { data: o }] = await Promise.all([
         supabase.from("restaurants").select("name").eq("id", restaurantId).maybeSingle(),
         supabase.from("menu_items").select("*").eq("restaurant_id", restaurantId).order("category").order("name"),
         supabase.from("orders").select("*, order_items(*)").eq("restaurant_id", restaurantId).order("pickup_time", { ascending: true, nullsFirst: false }),
       ]);
       setRestaurantName(r?.name ?? "Vendor");
-      setMenu((m as MenuItem[]) ?? []);
+      if (menuLoadError) {
+        console.error("Unable to load vendor menu:", menuLoadError.message);
+        setMenuError("Menu items could not be loaded. Please refresh and try again.");
+        setMenu([]);
+      } else {
+        setMenuError(null);
+        setMenu((m as MenuItem[]) ?? []);
+      }
       setOrders((o as unknown as Order[]) ?? []);
       setLoading(false);
     };
@@ -226,7 +234,13 @@ const VendorDashboard = () => {
           </TabsContent>
 
           <TabsContent value="menu" className="mt-5 space-y-3">
-            {menu.map((item) => (
+            {menuError ? (
+              <Card className="p-10 text-center text-sm text-muted-foreground">{menuError}</Card>
+            ) : menu.length === 0 ? (
+              <Card className="p-10 text-center text-sm text-muted-foreground">
+                No menu items have been added to this restaurant yet. Contact your Campus Admin for help.
+              </Card>
+            ) : menu.map((item) => (
               <Card key={item.id} className="flex flex-wrap items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">
                   <p className={`font-semibold ${item.is_available ? "text-navy" : "text-muted-foreground line-through"}`}>{item.name}</p>
