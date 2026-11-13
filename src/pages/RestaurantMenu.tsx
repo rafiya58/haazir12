@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/store/cart";
+import { useAuth } from "@/context/AuthContext";
 import { ArrowLeft, Loader2, Plus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import gyroverseLogo from "@/assets/gyroverse-logo.jpeg";
@@ -20,6 +21,7 @@ interface MenuItem {
 const RestaurantMenu = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const { studentUniversityIds } = useAuth();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,17 +30,26 @@ const RestaurantMenu = () => {
 
   useEffect(() => {
     if (!slug) return;
+    if (studentUniversityIds.length === 0) {
+      setRestaurant(null);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     let restaurantId: string | null = null;
+    let active = true;
     setLoading(true);
 
     (async () => {
       const { data: r } = await supabase
-        .from("restaurants").select("*").eq("slug", slug).maybeSingle();
+        .from("restaurants").select("*").eq("slug", slug).in("university_id", studentUniversityIds).maybeSingle();
+      if (!active) return;
       if (!r) { setLoading(false); return; }
       setRestaurant(r as Restaurant);
       restaurantId = r.id;
       const { data: m } = await supabase
         .from("menu_items").select("*").eq("restaurant_id", r.id).order("category").order("name");
+      if (!active) return;
       setItems((m as MenuItem[]) ?? []);
       setLoading(false);
     })();
@@ -57,8 +68,11 @@ const RestaurantMenu = () => {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [slug]);
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [slug, studentUniversityIds]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, MenuItem[]>();
