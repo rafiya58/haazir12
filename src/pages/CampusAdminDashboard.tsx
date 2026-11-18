@@ -46,6 +46,27 @@ interface ApprovedVendor {
   is_open: boolean;
 }
 
+const vendorEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const invitationEmailAcceptedMessage = "Brevo accepted the invitation request. Inbox or spam placement is not confirmed and depends on external email deliverability.";
+
+const getInvitationErrorMessage = async (error: unknown, fallback: string) => {
+  if (typeof error !== "object" || error === null || !("context" in error)) return fallback;
+  const context = error.context;
+  if (!(context instanceof Response)) return fallback;
+  try {
+    const body: unknown = await context.clone().json();
+    if (
+      typeof body === "object"
+      && body !== null
+      && "error" in body
+      && typeof body.error === "string"
+    ) return body.error;
+  } catch {
+    return fallback;
+  }
+  return fallback;
+};
+
 const CampusAdminDashboard = () => {
   const { campusUniversityIds } = useAuth();
   const [universityId, setUniversityId] = useState("");
@@ -162,6 +183,15 @@ const CampusAdminDashboard = () => {
 
   const inviteNewVendor = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const email = directVendorEmail.trim().toLowerCase();
+    if (!vendorEmailPattern.test(email) || email.length > 255) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+    if (!event.currentTarget.checkValidity()) {
+      toast.error("Please complete all required vendor details.");
+      return;
+    }
     if (!universityId || !campusUniversityIds.includes(universityId)) {
       toast.error("Select a campus you administer.");
       return;
@@ -173,7 +203,7 @@ const CampusAdminDashboard = () => {
         body: {
           university_id: universityId,
           full_name: directVendorName.trim(),
-          email: directVendorEmail.trim().toLowerCase(),
+          email,
           restaurant_name: directRestaurantName.trim(),
           contact_number: directContactNumber.trim(),
           description: directDescription.trim(),
@@ -181,22 +211,22 @@ const CampusAdminDashboard = () => {
         },
       });
       if (error) {
-        toast.error(error.message);
+        toast.error(await getInvitationErrorMessage(error, "Unable to create the vendor invitation. Please try again."));
         return;
       }
       if (data?.invited !== true) {
         toast.error("The vendor invitation response was incomplete.");
         return;
       }
-      toast.success(`Vendor invitation sent to ${directVendorEmail.trim().toLowerCase()}.`);
+      toast.success(`Vendor invitation request created for ${email}. Email inbox or spam placement depends on external deliverability.`);
       setDirectVendorName("");
       setDirectVendorEmail("");
       setDirectRestaurantName("");
       setDirectContactNumber("");
       setDirectDescription("");
       setDirectCuisine("");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to send the vendor invitation.");
+    } catch {
+      toast.error("Unable to create the vendor invitation. Please try again.");
     } finally {
       setDirectInviting(false);
     }
@@ -209,20 +239,21 @@ const CampusAdminDashboard = () => {
         body: { application_id: applicationId },
       });
       if (error || data?.invitation_sent !== true) {
-        const detail = error?.message ?? "The invitation service returned an incomplete response.";
+        const detail = error
+          ? await getInvitationErrorMessage(error, "The invitation service could not confirm the email request.")
+          : "The invitation service returned an incomplete response.";
         toast.error(afterApproval
           ? `Approval succeeded, but invitation email failed. The application remains awaiting acceptance. ${detail}`
           : `Invitation email failed. The application remains awaiting acceptance. ${detail}`);
         return;
       }
       toast.success(afterApproval
-        ? "Approval and email sent successfully."
-        : "Invitation email sent successfully.");
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "Unable to send the invitation email.";
+        ? `Approval succeeded. ${invitationEmailAcceptedMessage}`
+        : invitationEmailAcceptedMessage);
+    } catch {
       toast.error(afterApproval
-        ? `Approval succeeded, but invitation email failed. The application remains awaiting acceptance. ${detail}`
-        : `Invitation email failed. The application remains awaiting acceptance. ${detail}`);
+        ? "Approval succeeded, but the invitation email request could not be confirmed. The application remains awaiting acceptance."
+        : "The invitation email request could not be confirmed. The application remains awaiting acceptance.");
     } finally {
       setInvitingId(null);
       await loadDashboard();
@@ -317,7 +348,7 @@ const CampusAdminDashboard = () => {
                   Create a new vendor account for {universityName}. The vendor will set a password from the invitation email.
                 </p>
               </div>
-              <form onSubmit={inviteNewVendor} className="grid gap-3 sm:grid-cols-2">
+              <form onSubmit={inviteNewVendor} noValidate className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="direct-vendor-name">Vendor name</Label>
                   <Input id="direct-vendor-name" value={directVendorName} onChange={(event) => setDirectVendorName(event.target.value)} maxLength={80} required />

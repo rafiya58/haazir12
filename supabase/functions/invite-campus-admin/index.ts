@@ -6,11 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const jsonError = (error: string, status: number) =>
-  Response.json({ error }, { status, headers: corsHeaders });
+const jsonError = (error: string, status: number, code = "REQUEST_FAILED") =>
+  Response.json({ code, error }, { status, headers: corsHeaders });
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
+const emailRegex = /^[^\s@]+@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+const userPageSize = 1000;
 const describeError = (error: unknown) => {
   const fields = ["name", "message", "status", "code", "details", "hint", "error_description", "error_code"];
   const source = typeof error === "object" && error !== null
@@ -32,6 +32,15 @@ const describeError = (error: unknown) => {
 
 const logFailure = (operation: string, error: unknown) => {
   console.error(`[invite-campus-admin] ${operation} failed`, describeError(error));
+};
+
+const emailAlreadyRegistered = async (adminClient: ReturnType<typeof createClient>, email: string) => {
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: userPageSize });
+    if (error) throw error;
+    if (data.users.some((user) => user.email?.toLowerCase() === email)) return true;
+    if (data.users.length < userPageSize) return false;
+  }
 };
 
 Deno.serve(async (request) => {
@@ -69,7 +78,7 @@ Deno.serve(async (request) => {
       !serviceRoleKey && "SUPABASE_SERVICE_ROLE_KEY",
     ].filter(Boolean);
     logFailure("Supabase environment validation", `Missing variables: ${missingVariables.join(", ")}`);
-    return jsonError("Invite service is not configured", 500);
+    return jsonError("The invitation service is temporarily unavailable. Please try again.", 500, "INTERNAL_ERROR");
   }
 
   const callerClient = createClient(supabaseUrl, anonKey, {
@@ -83,7 +92,7 @@ Deno.serve(async (request) => {
   const { data: { user: caller }, error: callerError } = await callerClient.auth.getUser(match[1]);
   if (callerError || !caller) {
     logFailure("Platform Admin authentication verification", callerError ?? "Supabase returned no authenticated user");
-    return jsonError("Invalid session", 401);
+    return jsonError("Your session is invalid or expired. Please sign in again.", 401, "INVALID_SESSION");
   }
   console.info("[invite-campus-admin] Platform Admin authentication verification succeeded", { callerId: caller.id });
 
@@ -97,11 +106,11 @@ Deno.serve(async (request) => {
 
   if (roleError) {
     logFailure("Platform Admin role verification", roleError);
-    return jsonError("Unable to verify invite permission", 500);
+    return jsonError("Unable to verify invitation permission. Please try again.", 500, "PERMISSION_CHECK_FAILED");
   }
   if (!platformRole) {
     logFailure("Platform Admin role verification", "No platform_admin role found for caller");
-    return jsonError("Only platform admins can onboard campuses", 403);
+    return jsonError("Only Platform Admins can onboard campuses.", 403, "PERMISSION_DENIED");
   }
   console.info("[invite-campus-admin] Platform Admin role verification succeeded", { callerId: caller.id });
 
@@ -117,7 +126,7 @@ Deno.serve(async (request) => {
     body = await request.json();
   } catch (error) {
     logFailure("Request body parsing", error);
-    return jsonError("Invalid request body", 400);
+    return jsonError("The request could not be read. Please check the form and try again.", 400, "INVALID_REQUEST");
   }
 
   const campusName = typeof body.campus_name === "string" ? body.campus_name.trim() : "";
@@ -128,23 +137,23 @@ Deno.serve(async (request) => {
 
   if (campusName.length < 2 || campusName.length > 100) {
     logFailure("Request body validation", "campus_name must be between 2 and 100 characters");
-    return jsonError("Campus name must be between 2 and 100 characters", 400);
+    return jsonError("Campus name must be between 2 and 100 characters.", 400, "INVALID_CAMPUS_NAME");
   }
   if (location.length > 200) {
     logFailure("Request body validation", "location must be at most 200 characters");
-    return jsonError("Campus location must be at most 200 characters", 400);
+    return jsonError("Campus location must be at most 200 characters.", 400, "INVALID_LOCATION");
   }
   if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(emailDomain) || emailDomain.length > 255) {
     logFailure("Request body validation", "email_domain must be a valid domain of at most 255 characters");
-    return jsonError("Enter a valid student email domain", 400);
+    return jsonError("Enter a valid student email domain.", 400, "INVALID_EMAIL_DOMAIN");
   }
   if (!emailRegex.test(adminEmail) || adminEmail.length > 255) {
     logFailure("Request body validation", "admin_email must be a valid email address of at most 255 characters");
-    return jsonError("Enter a valid campus admin email address", 400);
+    return jsonError("Please enter a valid email address.", 400, "INVALID_ADMIN_EMAIL");
   }
   if (contactEmail && (!emailRegex.test(contactEmail) || contactEmail.length > 255)) {
     logFailure("Request body validation", "contact_email must be a valid email address of at most 255 characters");
-    return jsonError("Enter a valid campus contact email address", 400);
+    return jsonError("Enter a valid campus contact email address.", 400, "INVALID_CONTACT_EMAIL");
   }
   console.info("[invite-campus-admin] Request body validation succeeded", {
     campusNameLength: campusName.length,
@@ -161,9 +170,22 @@ Deno.serve(async (request) => {
     .replace(/-+$/g, "");
   if (!campusSlug) {
     logFailure("Campus name normalization", "campus_name produced an empty slug");
-    return jsonError("Campus name must include letters or numbers", 400);
+    return jsonError("Campus name must include letters or numbers.", 400, "INVALID_CAMPUS_NAME");
   }
   const campusId = `${campusSlug.slice(0, 55)}-${crypto.randomUUID().slice(0, 8)}`;
+
+  try {
+    if (await emailAlreadyRegistered(adminClient, adminEmail)) {
+      return jsonError(
+        "This email is already registered. Please use a different email address.",
+        409,
+        "EMAIL_ALREADY_REGISTERED",
+      );
+    }
+  } catch (error) {
+    logFailure("Campus Admin email availability check", error);
+    return jsonError("Unable to verify this email address. Please try again.", 500, "EMAIL_CHECK_FAILED");
+  }
 
   console.info("[invite-campus-admin] University creation starting", { campusId });
   console.info("[invite-campus-admin] Generated university ID", { campusId });
@@ -180,12 +202,9 @@ Deno.serve(async (request) => {
     .single();
   if (campusError || !campus) {
     logFailure("University creation", campusError ?? "Supabase returned no created university");
-    return jsonError(
-      campusError?.code === "23505"
-        ? "A campus with this name or email domain already exists"
-        : campusError?.message ?? "Unable to create the campus",
-      campusError?.code === "23505" ? 409 : 400,
-    );
+    return campusError?.code === "23505"
+      ? jsonError("A campus with this name or email domain already exists.", 409, "CAMPUS_ALREADY_EXISTS")
+      : jsonError("Unable to create the campus. Please try again.", 500, "CAMPUS_CREATE_FAILED");
   }
   console.info("[invite-campus-admin] University creation succeeded", { universityId: campus.id });
 
@@ -212,7 +231,7 @@ Deno.serve(async (request) => {
     const { error: cleanupError } = await adminClient.from("universities").delete().eq("id", campus.id);
     if (cleanupError) logFailure("University cleanup after invitation exception", cleanupError);
     else console.info("[invite-campus-admin] University removed after invitation exception", { universityId: campus.id });
-    return jsonError("Unable to send the invitation email", 500);
+    return jsonError("Unable to send the invitation email. Please try again.", 502, "INVITATION_FAILED");
   }
   const { data: inviteData, error: inviteError } = inviteResult;
   console.info("[invite-campus-admin] Invitation API call returned", {
@@ -224,7 +243,10 @@ Deno.serve(async (request) => {
     const { error: cleanupError } = await adminClient.from("universities").delete().eq("id", campus.id);
     if (cleanupError) logFailure("University cleanup after invitation failure", cleanupError);
     else console.info("[invite-campus-admin] University removed after invitation failure", { universityId: campus.id });
-    return jsonError(inviteError?.message ?? "Unable to send the invitation email", 400);
+    const duplicateEmail = /already registered|already exists|already been registered/i.test(inviteError?.message ?? "");
+    return duplicateEmail
+      ? jsonError("This email is already registered. Please use a different email address.", 409, "EMAIL_ALREADY_REGISTERED")
+      : jsonError("Unable to send the invitation email. Please try again.", 502, "INVITATION_FAILED");
   }
   console.info("[invite-campus-admin] Campus Admin invitation succeeded", { userId: inviteData.user.id });
 
@@ -246,7 +268,7 @@ Deno.serve(async (request) => {
     const { error: campusRollbackError } = await adminClient.from("universities").delete().eq("id", campus.id);
     if (campusRollbackError) logFailure("University rollback after role insertion failure", campusRollbackError);
     else console.info("[invite-campus-admin] University rollback succeeded", { universityId: campus.id });
-    return jsonError("Invitation could not be assigned to the campus", 500);
+    return jsonError("The invitation could not be assigned to the campus. Please contact support.", 500, "INVITATION_ASSIGNMENT_FAILED");
   }
   console.info("[invite-campus-admin] Campus Admin role insertion succeeded", {
     userId: inviteData.user.id,

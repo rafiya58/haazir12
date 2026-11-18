@@ -79,12 +79,30 @@ const VendorDashboard = () => {
     }
   };
 
-  const updatePrice = async (item: MenuItem, raw: string) => {
-    const price = parseFloat(raw);
-    if (isNaN(price) || price < 0) return;
-    const { error } = await supabase.from("menu_items").update({ price }).eq("id", item.id);
-    if (error) toast.error(error.message);
-    else toast.success(`Price updated`);
+  const updateMenuItem = async (item: MenuItem, name: string, rawPrice: string) => {
+    const updatedName = name.trim();
+    const price = Number(rawPrice);
+    if (!updatedName) {
+      toast.error("Menu item name is required.");
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      toast.error("Enter a valid, non-negative menu item price.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("menu_items")
+      .update({ name: updatedName, price })
+      .eq("id", item.id);
+    if (error) {
+      toast.error("Unable to save menu item changes. Please try again.");
+    } else {
+      setMenu((previous) => previous.map((menuItem) => (
+        menuItem.id === item.id ? { ...menuItem, name: updatedName, price } : menuItem
+      )));
+      toast.success("Menu item updated.");
+    }
   };
 
   const updateOrderStatus = async (id: string, status: "pending" | "preparing" | "ready" | "completed" | "cancelled") => {
@@ -242,20 +260,45 @@ const VendorDashboard = () => {
               </Card>
             ) : menu.map((item) => (
               <Card key={item.id} className="flex flex-wrap items-center gap-3 p-4">
-                <div className="min-w-0 flex-1">
-                  <p className={`font-semibold ${item.is_available ? "text-navy" : "text-muted-foreground line-through"}`}>{item.name}</p>
-                  <p className="text-xs text-muted-foreground">{item.category}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Rs</span>
-                  <Input type="number" defaultValue={Number(item.price)} min={0} step="1"
-                    onBlur={(e) => updatePrice(item, e.target.value)}
-                    className="w-24 h-9" />
-                </div>
+                <form
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const formData = new FormData(event.currentTarget);
+                    void updateMenuItem(item, String(formData.get("name") ?? ""), String(formData.get("price") ?? ""));
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      name="name"
+                      aria-label={`Name for ${item.name}`}
+                      defaultValue={item.name}
+                      maxLength={100}
+                      required
+                      className="h-9"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">{item.category}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Rs</span>
+                    <Input
+                      name="price"
+                      aria-label={`Price for ${item.name}`}
+                      type="number"
+                      defaultValue={Number(item.price)}
+                      min={0}
+                      step="0.01"
+                      required
+                      className="h-9 w-24"
+                    />
+                  </div>
+                  <Button type="submit" variant="outline" size="sm">Save changes</Button>
+                </form>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">{item.is_available ? "Available" : "Sold out"}</span>
                   <Switch checked={item.is_available} onCheckedChange={() => toggleAvailable(item)} />
                 </div>
+
               </Card>
             ))}
           </TabsContent>

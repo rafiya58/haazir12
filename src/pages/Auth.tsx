@@ -16,6 +16,50 @@ import { z } from "zod";
 type AccountType = "student" | "vendor";
 type RecoveryStep = "request" | "verify" | "password";
 type AuthTab = "login" | "signup";
+type OtpFlow = "signup" | "recovery";
+
+interface OtpAttemptState {
+  count: number;
+  lockedUntil: number;
+}
+
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_LOCKOUT_MS = 15 * 60 * 1000;
+const emptyOtpAttemptState: OtpAttemptState = { count: 0, lockedUntil: 0 };
+
+const otpAttemptStorageKey = (flow: OtpFlow, email: string) =>
+  `haazir:otp-attempts:${flow}:${email.trim().toLowerCase()}`;
+
+const readOtpAttemptState = (flow: OtpFlow, email: string, fallback: OtpAttemptState): OtpAttemptState => {
+  try {
+    const stored = localStorage.getItem(otpAttemptStorageKey(flow, email));
+    if (!stored) return fallback;
+    const parsed: unknown = JSON.parse(stored);
+    if (
+      typeof parsed !== "object"
+      || parsed === null
+      || !("count" in parsed)
+      || !("lockedUntil" in parsed)
+      || typeof parsed.count !== "number"
+      || typeof parsed.lockedUntil !== "number"
+    ) return fallback;
+    if (parsed.lockedUntil > 0 && parsed.lockedUntil <= Date.now()) return emptyOtpAttemptState;
+    return { count: parsed.count, lockedUntil: parsed.lockedUntil };
+  } catch (error) {
+    console.warn("Unable to read OTP attempt state:", error);
+    return fallback;
+  }
+};
+
+const storeOtpAttemptState = (flow: OtpFlow, email: string, state: OtpAttemptState) => {
+  try {
+    const key = otpAttemptStorageKey(flow, email);
+    if (state.count === 0 && state.lockedUntil === 0) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(state));
+  } catch (error) {
+    console.warn("Unable to save OTP attempt state:", error);
+  }
+};
 
 interface CampusOption {
   id: string;
@@ -75,11 +119,27 @@ const Auth = () => {
   const [signupOtpPending, setSignupOtpPending] = useState(false);
   const [signupEmailToVerify, setSignupEmailToVerify] = useState("");
   const [signupOtp, setSignupOtp] = useState("");
+  const [signupOtpAttempts, setSignupOtpAttempts] = useState<OtpAttemptState>(emptyOtpAttemptState);
   const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
   const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>("request");
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [recoveryOtp, setRecoveryOtp] = useState("");
+  const [recoveryOtpAttempts, setRecoveryOtpAttempts] = useState<OtpAttemptState>(emptyOtpAttemptState);
   const [newPassword, setNewPassword] = useState("");
+  const [otpClock, setOtpClock] = useState(() => Date.now());
+  const signupOtpLocked = signupOtpAttempts.lockedUntil > otpClock;
+  const recoveryOtpLocked = recoveryOtpAttempts.lockedUntil > otpClock;
+
+  useEffect(() => {
+    const lockDeadlines = [signupOtpAttempts.lockedUntil, recoveryOtpAttempts.lockedUntil]
+      .filter((deadline) => deadline > otpClock);
+    if (lockDeadlines.length === 0) return;
+    const timeout = window.setTimeout(
+      () => setOtpClock(Date.now()),
+      Math.max(0, Math.min(...lockDeadlines) - Date.now()),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [otpClock, recoveryOtpAttempts.lockedUntil, signupOtpAttempts.lockedUntil]);
 
   useEffect(() => {
     let active = true;
@@ -218,7 +278,7 @@ const Auth = () => {
         if (accountType === "vendor" && /already registered|already exists/i.test(error.message)) {
           setLoginEmail(parsedEmail);
           setAuthTab("login");
-          toast.error("This email already has an account. Sign in with it, then submit your vendor application; your student access will remain.");
+          toast.error("This email is already registered. Please use the existing-user vendor invitation option.");
           return;
         }
         toast.error(error.message);
@@ -235,6 +295,7 @@ const Auth = () => {
       }
       setSignupEmailToVerify(parsedEmail);
       setSignupOtp("");
+      setSignupOtpAttempts(readOtpAttemptState("signup", parsedEmail, emptyOtpAttemptState));
       setSignupOtpPending(true);
       toast.success("Check your email for a verification code.");
     } catch (error) {
@@ -246,6 +307,12 @@ const Auth = () => {
 
   const handleVerifySignupOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    const attempts = readOtpAttemptState("signup", signupEmailToVerify, signupOtpAttempts);
+    if (attempts.lockedUntil > Date.now()) {
+      setSignupOtpAttempts(attempts);
+      toast.error("Too many incorrect verification codes. Please wait 15 minutes before trying again.");
+      return;
+    }
     const parsed = signupOtpSchema.safeParse(signupOtp);
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
@@ -260,9 +327,21 @@ const Auth = () => {
         type: "signup",
       });
       if (error) {
-        toast.error(error.message);
+        const count = attempts.count + 1;
+        const nextAttempts = {
+          count,
+          lockedUntil: count >= OTP_MAX_ATTEMPTS ? Date.now() + OTP_LOCKOUT_MS : 0,
+        };
+        storeOtpAttemptState("signup", signupEmailToVerify, nextAttempts);
+        setSignupOtpAttempts(nextAttempts);
+        setOtpClock(Date.now());
+        toast.error(count >= OTP_MAX_ATTEMPTS
+          ? "Too many incorrect verification codes. Please wait 15 minutes before trying again."
+          : `That verification code is incorrect. ${OTP_MAX_ATTEMPTS - count} attempts remaining.`);
         return;
       }
+      storeOtpAttemptState("signup", signupEmailToVerify, emptyOtpAttemptState);
+      setSignupOtpAttempts(emptyOtpAttemptState);
       setSignupOtpPending(false);
       setSignupOtp("");
       toast.success("Email verified successfully.");
@@ -271,8 +350,8 @@ const Auth = () => {
       } else {
         navigate("/");
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to verify your email.");
+    } catch {
+      toast.error("Unable to verify your email. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -315,6 +394,7 @@ const Auth = () => {
         return;
       }
       setRecoveryEmail(parsed.data.email);
+      setRecoveryOtpAttempts(readOtpAttemptState("recovery", parsed.data.email, emptyOtpAttemptState));
       setRecoveryStep("verify");
       toast.success("If an account exists for that email, check your inbox for a recovery code or reset link.");
     } catch (error) {
@@ -326,6 +406,12 @@ const Auth = () => {
 
   const handleVerifyRecoveryOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    const attempts = readOtpAttemptState("recovery", recoveryEmail, recoveryOtpAttempts);
+    if (attempts.lockedUntil > Date.now()) {
+      setRecoveryOtpAttempts(attempts);
+      toast.error("Too many incorrect recovery codes. Please wait 15 minutes before trying again.");
+      return;
+    }
     const parsed = recoveryOtpSchema.safeParse(recoveryOtp);
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
@@ -340,13 +426,25 @@ const Auth = () => {
         type: "recovery",
       });
       if (error) {
-        toast.error(error.message);
+        const count = attempts.count + 1;
+        const nextAttempts = {
+          count,
+          lockedUntil: count >= OTP_MAX_ATTEMPTS ? Date.now() + OTP_LOCKOUT_MS : 0,
+        };
+        storeOtpAttemptState("recovery", recoveryEmail, nextAttempts);
+        setRecoveryOtpAttempts(nextAttempts);
+        setOtpClock(Date.now());
+        toast.error(count >= OTP_MAX_ATTEMPTS
+          ? "Too many incorrect recovery codes. Please wait 15 minutes before trying again."
+          : `That recovery code is incorrect. ${OTP_MAX_ATTEMPTS - count} attempts remaining.`);
         return;
       }
+      storeOtpAttemptState("recovery", recoveryEmail, emptyOtpAttemptState);
+      setRecoveryOtpAttempts(emptyOtpAttemptState);
       setRecoveryStep("password");
       toast.success("Email verified. Choose a new password.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to verify the recovery code.");
+    } catch {
+      toast.error("Unable to verify the recovery code. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -442,16 +540,22 @@ const Auth = () => {
                       maxLength={6}
                       value={recoveryOtp}
                       onChange={(e) => setRecoveryOtp(e.target.value)}
+                      disabled={recoveryOtpLocked}
                     />
                   </div>
-                  <Button type="submit" variant="cta" size="lg" className="w-full" disabled={loading}>
+                  {recoveryOtpLocked && (
+                    <p role="alert" className="text-sm text-destructive">
+                      Too many incorrect recovery codes. Please wait 15 minutes before trying again.
+                    </p>
+                  )}
+                  <Button type="submit" variant="cta" size="lg" className="w-full" disabled={loading || recoveryOtpLocked}>
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify code"}
                   </Button>
                   <Button
                     type="button"
                     variant="link"
                     className="w-full"
-                    disabled={loading}
+                    disabled={loading || recoveryOtpLocked}
                     onClick={() => setRecoveryStep("request")}
                   >
                     Resend code or use another email
@@ -555,6 +659,11 @@ const Auth = () => {
                         Check your spam folder if it is missing. Supabase's default email service only
                         delivers to project team addresses; configure custom SMTP to send codes to students.
                       </p>
+                      {signupOtpLocked && (
+                        <p role="alert" className="text-sm text-destructive">
+                          Too many incorrect verification codes. Please wait 15 minutes before trying again.
+                        </p>
+                      )}
                     </div>
                     <form onSubmit={handleVerifySignupOtp} className="space-y-4">
                       <div className="space-y-2">
@@ -567,9 +676,10 @@ const Auth = () => {
                           maxLength={6}
                           value={signupOtp}
                           onChange={(e) => setSignupOtp(e.target.value)}
+                          disabled={signupOtpLocked}
                         />
                       </div>
-                      <Button type="submit" variant="cta" size="lg" className="w-full" disabled={loading}>
+                      <Button type="submit" variant="cta" size="lg" className="w-full" disabled={loading || signupOtpLocked}>
                         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify email"}
                       </Button>
                     </form>
@@ -577,7 +687,7 @@ const Auth = () => {
                       type="button"
                       variant="link"
                       className="w-full"
-                      disabled={loading}
+                      disabled={loading || signupOtpLocked}
                       onClick={handleResendSignupOtp}
                     >
                       Resend verification code

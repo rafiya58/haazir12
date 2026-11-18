@@ -134,7 +134,7 @@ Deno.serve(async (request) => {
 
   try {
     if (await emailAlreadyRegistered(adminClient, email)) {
-      return jsonError("This email already has a Haazir account. Ask the user to sign in and use the existing-user vendor application flow.", 409);
+      return jsonError("An account with this email already exists. Please log in or use another email.", 409);
     }
   } catch (error) {
     console.error("[invite-campus-vendor] Existing Auth account check failed:", error instanceof Error ? error.message : "Unknown error");
@@ -153,7 +153,10 @@ Deno.serve(async (request) => {
 
   if (inviteError || !inviteData.user) {
     console.error("[invite-campus-vendor] Auth invitation failed:", inviteError?.message ?? "No user returned");
-    return jsonError(inviteError?.message ?? "Unable to create the vendor invitation", 400);
+    if (/already registered|already exists|already been registered/i.test(inviteError?.message ?? "")) {
+      return jsonError("An account with this email already exists. Please log in or use another email.", 409);
+    }
+    return jsonError("Unable to create the vendor invitation. Please try again.", 400);
   }
 
   const { error: recordError } = await adminClient.rpc("create_direct_vendor_invitation", {

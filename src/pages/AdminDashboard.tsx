@@ -23,6 +23,48 @@ interface Campus {
   contact_email: string | null;
 }
 
+const campusAdminEmailPattern = /^[^\s@]+@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+const campusAdminInviteErrorMessages: Record<string, string> = {
+  INVALID_ADMIN_EMAIL: "Please enter a valid email address.",
+  EMAIL_ALREADY_REGISTERED: "This email is already registered. Please use a different email address.",
+  INVALID_CAMPUS_NAME: "Campus name must be between 2 and 100 characters and include letters or numbers.",
+  INVALID_LOCATION: "Campus location must be at most 200 characters.",
+  INVALID_EMAIL_DOMAIN: "Enter a valid student email domain.",
+  INVALID_CONTACT_EMAIL: "Enter a valid campus contact email address.",
+  CAMPUS_ALREADY_EXISTS: "A campus with this name or email domain already exists.",
+  EMAIL_CHECK_FAILED: "Unable to verify this email address. Please try again.",
+  CAMPUS_CREATE_FAILED: "Unable to create the campus. Please try again.",
+  INVITATION_FAILED: "Unable to send the invitation email. Please try again.",
+  INVITATION_ASSIGNMENT_FAILED: "The invitation could not be assigned to the campus. Please contact support.",
+  INTERNAL_ERROR: "The invitation service is temporarily unavailable. Please try again.",
+  PERMISSION_CHECK_FAILED: "Unable to verify invitation permission. Please try again.",
+  PERMISSION_DENIED: "Only Platform Admins can onboard campuses.",
+  INVALID_SESSION: "Your session is invalid or expired. Please sign in again.",
+};
+
+const getCampusAdminInviteErrorMessage = async (error: unknown) => {
+  if (typeof error !== "object" || error === null || !("context" in error)) {
+    return "Unable to create the campus admin invitation. Please try again.";
+  }
+  const context = error.context;
+  if (!(context instanceof Response)) {
+    return "Unable to create the campus admin invitation. Please try again.";
+  }
+  try {
+    const body: unknown = await context.clone().json();
+    if (
+      typeof body === "object"
+      && body !== null
+      && "code" in body
+      && typeof body.code === "string"
+      && body.code in campusAdminInviteErrorMessages
+    ) return campusAdminInviteErrorMessages[body.code];
+  } catch {
+    return "Unable to create the campus admin invitation. Please try again.";
+  }
+  return "Unable to create the campus admin invitation. Please try again.";
+};
+
 const AdminDashboard = () => {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [campuses, setCampuses] = useState<Campus[]>([]);
@@ -36,6 +78,12 @@ const AdminDashboard = () => {
 
   const inviteCampusAdmin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const invitedEmail = adminEmail.trim().toLowerCase();
+    if (invitedEmail.length > 255 || !campusAdminEmailPattern.test(invitedEmail)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+
     setInviting(true);
     try {
       const { data, error } = await supabase.functions.invoke("invite-campus-admin", {
@@ -44,18 +92,17 @@ const AdminDashboard = () => {
           email_domain: campusDomain.trim().toLowerCase(),
           location: campusLocation.trim(),
           contact_email: campusContactEmail.trim().toLowerCase(),
-          admin_email: adminEmail.trim().toLowerCase(),
+          admin_email: invitedEmail,
         },
       });
       if (error) {
-        toast.error(error.message);
+        toast.error(await getCampusAdminInviteErrorMessage(error));
         return;
       }
       if (typeof data?.campus_id !== "string") {
         toast.error("The campus was created, but the invitation response was incomplete.");
         return;
       }
-      const invitedEmail = adminEmail.trim().toLowerCase();
       setCampusName("");
       setCampusDomain("");
       setCampusLocation("");
@@ -63,8 +110,8 @@ const AdminDashboard = () => {
       setAdminEmail("");
       toast.success(`Campus onboarded. Invitation email sent to ${invitedEmail}.`);
       await loadDashboard();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to onboard the campus or generate its admin invitation.");
+    } catch {
+      toast.error("Unable to create the campus admin invitation. Please try again.");
     } finally {
       setInviting(false);
     }
@@ -164,7 +211,7 @@ const AdminDashboard = () => {
           <p className="mb-4 text-sm text-muted-foreground">
             Add the campus details and send an email invitation to its administrator.
           </p>
-          <form onSubmit={inviteCampusAdmin} className="grid gap-3 sm:grid-cols-2">
+          <form onSubmit={inviteCampusAdmin} noValidate className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="campus-name">Campus name</Label>
               <Input

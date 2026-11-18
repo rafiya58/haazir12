@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { renderVendorInvitationEmail } from "../_shared/vendor-invitation-email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,13 +12,6 @@ const jsonError = (error: string, status: number) =>
 
 const toHex = (bytes: Uint8Array) =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-
-const escapeHtml = (value: string) => value
-  .replace(/&/g, "&amp;")
-  .replace(/</g, "&lt;")
-  .replace(/>/g, "&gt;")
-  .replace(/"/g, "&quot;")
-  .replace(/'/g, "&#39;");
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -202,9 +196,11 @@ Deno.serve(async (request) => {
 
   const invitationUrl = new URL("/join-vendor", siteOrigin);
   invitationUrl.searchParams.set("token", rawToken);
-  const safeBusinessName = escapeHtml(application.restaurant_name);
-  const safeInvitationUrl = escapeHtml(invitationUrl.toString());
-  const expiryLabel = new Date(expiresAt).toUTCString();
+  const emailContent = renderVendorInvitationEmail({
+    businessName: application.restaurant_name,
+    invitationUrl: invitationUrl.toString(),
+    expiresAt,
+  });
 
   try {
     const emailResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -217,9 +213,9 @@ Deno.serve(async (request) => {
       body: JSON.stringify({
         sender: { email: senderEmail, name: senderName },
         to: [{ email: applicant.email }],
-        subject: "Join your campus as a Haazir vendor",
-        htmlContent: `<h2>Your vendor application was approved</h2><p>Your application for ${safeBusinessName} was approved by your campus admin.</p><p><a href="${safeInvitationUrl}">Join as Vendor</a></p><p>This secure link expires on ${expiryLabel} and can only be used once. Sign in to your existing Haazir account to accept.</p><p>If you were not expecting this email, you can ignore it.</p>`,
-        textContent: `Your application for ${application.restaurant_name} was approved. Join as Vendor using this one-time link: ${invitationUrl.toString()} This link expires on ${expiryLabel}. Sign in to your existing Haazir account to accept.`,
+        subject: emailContent.subject,
+        htmlContent: emailContent.html,
+        textContent: emailContent.text,
       }),
     });
 

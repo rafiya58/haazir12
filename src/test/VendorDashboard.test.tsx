@@ -95,23 +95,24 @@ describe("VendorDashboard menu management", () => {
     mocks.toastSuccess.mockReset();
   });
 
-  it("opens the menu tab, loads items, and keeps price and availability controls working", async () => {
+  it("saves menu item name and price while keeping availability controls working", async () => {
     render(<VendorDashboard />);
     await screen.findByText("Test Restaurant");
     const menuTab = screen.getByRole("tab", { name: "Menu manager" });
     fireEvent.mouseDown(menuTab, { button: 0, ctrlKey: false });
 
-    expect(await screen.findByText("Test Dish")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Name for Test Dish" })).toHaveValue("Test Dish");
     expect(menuTab).toHaveAttribute("aria-selected", "true");
 
+    fireEvent.change(screen.getByRole("textbox", { name: "Name for Test Dish" }), { target: { value: "Updated Dish" } });
     fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "25" } });
-    fireEvent.blur(screen.getByRole("spinbutton"));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     fireEvent.click(screen.getByRole("switch"));
 
     await waitFor(() => expect(mocks.updates).toHaveLength(2));
     expect(mocks.updates).toContainEqual({
       table: "menu_items",
-      values: { price: 25 },
+      values: { name: "Updated Dish", price: 25 },
       id: "menu-item-id",
     });
     expect(mocks.updates).toContainEqual({
@@ -119,8 +120,10 @@ describe("VendorDashboard menu management", () => {
       values: { is_available: false },
       id: "menu-item-id",
     });
+    expect(screen.getByRole("textbox", { name: "Name for Updated Dish" })).toHaveValue("Updated Dish");
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "false");
   });
+
 
   it("shows a helpful message when the menu is empty", async () => {
     mocks.results.menu_items = { data: [], error: null };
