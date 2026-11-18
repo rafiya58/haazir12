@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/store/cart";
+import { useAuth } from "@/context/AuthContext";
 import { ArrowLeft, Loader2, Plus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import gyroverseLogo from "@/assets/gyroverse-logo.jpeg";
@@ -14,12 +15,13 @@ interface Restaurant {
   id: string; name: string; slug: string; emoji: string | null; cuisine: string | null; is_open: boolean;
 }
 interface MenuItem {
-  id: string; name: string; description: string | null; price: number; category: string; is_available: boolean; restaurant_id: string;
+  id: string; name: string; description: string | null; image_url: string | null; price: number; category: string; is_available: boolean; restaurant_id: string;
 }
 
 const RestaurantMenu = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const { studentUniversityIds } = useAuth();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,17 +30,26 @@ const RestaurantMenu = () => {
 
   useEffect(() => {
     if (!slug) return;
+    if (studentUniversityIds.length === 0) {
+      setRestaurant(null);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     let restaurantId: string | null = null;
+    let active = true;
     setLoading(true);
 
     (async () => {
       const { data: r } = await supabase
-        .from("restaurants").select("*").eq("slug", slug).maybeSingle();
+        .from("restaurants").select("*").eq("slug", slug).in("university_id", studentUniversityIds).maybeSingle();
+      if (!active) return;
       if (!r) { setLoading(false); return; }
       setRestaurant(r as Restaurant);
       restaurantId = r.id;
       const { data: m } = await supabase
         .from("menu_items").select("*").eq("restaurant_id", r.id).order("category").order("name");
+      if (!active) return;
       setItems((m as MenuItem[]) ?? []);
       setLoading(false);
     })();
@@ -57,8 +68,11 @@ const RestaurantMenu = () => {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [slug]);
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [slug, studentUniversityIds]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, MenuItem[]>();
@@ -156,10 +170,13 @@ const RestaurantMenu = () => {
                 return (
                   <Card
                     key={item.id}
-                    className={`flex items-center justify-between gap-4 p-4 transition-all ${
+                    className={`flex items-center gap-4 p-4 transition-all ${
                       unavailable ? "opacity-50 grayscale" : "hover:shadow-card"
                     }`}
                   >
+                    {item.image_url && (
+                      <img src={item.image_url} alt={item.name} className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <h3 className="truncate font-semibold text-navy">{item.name}</h3>

@@ -105,7 +105,8 @@ describe("VendorDashboard menu management", () => {
     expect(menuTab).toHaveAttribute("aria-selected", "true");
 
     fireEvent.change(screen.getByRole("textbox", { name: "Name for Test Dish" }), { target: { value: "Updated Dish" } });
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "25" } });
+    const itemPrice = screen.getByRole("spinbutton", { name: "Price for Test Dish" });
+    fireEvent.change(itemPrice, { target: { value: "25" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     fireEvent.click(screen.getByRole("switch"));
 

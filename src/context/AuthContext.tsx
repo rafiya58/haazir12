@@ -14,6 +14,7 @@ interface AuthContextValue {
   roleError: string | null;
   restaurantId: string | null;
   universityIds: string[];
+  studentUniversityIds: string[];
   campusUniversityIds: string[];
   signOut: () => Promise<void>;
   refreshRoles: () => Promise<{ success: boolean; roles: AppRole[] }>;
@@ -32,6 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [roleError, setRoleError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [universityIds, setUniversityIds] = useState<string[]>([]);
+  const [studentUniversityIds, setStudentUniversityIds] = useState<string[]>([]);
   const [campusUniversityIds, setCampusUniversityIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -50,6 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setRoles([]);
       setRestaurantId(null);
       setUniversityIds([]);
+      setStudentUniversityIds([]);
       setCampusUniversityIds([]);
       return { success: false, roles: [] };
     }
@@ -60,6 +63,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRestaurantId(vendor?.restaurant_id ?? null);
     setUniversityIds(
       [...new Set(data.flatMap((role) => role.university_id ? [role.university_id] : []))],
+    );
+    setStudentUniversityIds(
+      [...new Set(data.flatMap((role) =>
+        role.role === "student" && role.university_id ? [role.university_id] : [],
+      ))],
     );
     setCampusUniversityIds(
       [...new Set(data.flatMap((role) =>
@@ -86,6 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setRoleError(null);
         setRestaurantId(null);
         setUniversityIds([]);
+        setStudentUniversityIds([]);
         setCampusUniversityIds([]);
         setLoading(false);
       }
@@ -122,7 +131,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const activateVendorMode = () => setActiveMode("vendor");
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, roles, activeMode, roleError, restaurantId, universityIds, campusUniversityIds, signOut, refreshRoles, switchMode, activateVendorMode }}>
+    <AuthContext.Provider value={{ user, session, loading, roles, activeMode, roleError, restaurantId, universityIds, studentUniversityIds, campusUniversityIds, signOut, refreshRoles, switchMode, activateVendorMode }}>
       {children}
     </AuthContext.Provider>
   );

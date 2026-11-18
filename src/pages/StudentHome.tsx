@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Clock, Loader2 } from "lucide-react";
 import gyroverseLogo from "@/assets/gyroverse-logo.jpeg";
+import { useAuth } from "@/context/AuthContext";
 
 interface Restaurant {
   id: string;
@@ -15,22 +16,44 @@ interface Restaurant {
   emoji: string | null;
   description: string | null;
   is_open: boolean;
+  university_id: string;
 }
 
 const StudentHome = () => {
+  const { studentUniversityIds } = useAuth();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+    if (studentUniversityIds.length === 0) {
+      setRestaurants([]);
+      setLoadError(null);
+      setLoading(false);
+      return () => { active = false; };
+    }
+
+    setLoading(true);
     supabase
       .from("restaurants")
-      .select("id,name,slug,cuisine,emoji,description,is_open")
+      .select("id,name,slug,cuisine,emoji,description,is_open,university_id")
+      .in("university_id", studentUniversityIds)
       .order("name")
-      .then(({ data }) => {
-        setRestaurants(data ?? []);
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          console.error("Unable to load campus restaurants:", error.message);
+          setLoadError("Campus restaurants could not be loaded. Please refresh and try again.");
+          setRestaurants([]);
+        } else {
+          setLoadError(null);
+          setRestaurants((data as Restaurant[]) ?? []);
+        }
         setLoading(false);
       });
-  }, []);
+    return () => { active = false; };
+  }, [studentUniversityIds]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -53,13 +76,23 @@ const StudentHome = () => {
       <section className="container pt-10 pb-16">
         <div className="mb-5 flex items-end justify-between">
           <div>
-            <h2 className="font-display text-xl font-bold sm:text-2xl">Campus restaurants</h2>
+            <h2 className="font-display text-xl font-bold sm:text-2xl">Your campus restaurants</h2>
             <p className="text-sm text-muted-foreground">Tap any vendor to view today's menu</p>
           </div>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-forest" /></div>
+        ) : loadError ? (
+          <Card className="p-8 text-center text-sm text-destructive">{loadError}</Card>
+        ) : studentUniversityIds.length === 0 ? (
+          <Card className="p-8 text-center text-sm text-muted-foreground">
+            Your account is not linked to a university yet. Please contact your campus administrator.
+          </Card>
+        ) : restaurants.length === 0 ? (
+          <Card className="p-8 text-center text-sm text-muted-foreground">
+            No vendors are registered at your university yet.
+          </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {restaurants.map((r) => (
