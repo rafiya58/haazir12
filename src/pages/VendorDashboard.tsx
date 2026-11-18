@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import imageCompression from "browser-image-compression";
-import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck, Clock, Receipt, Plus } from "lucide-react";
+import { Loader2, ChefHat, Bell, CheckCircle2, X, BadgeCheck, Clock, Receipt, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface MenuItem { id: string; name: string; description: string | null; image_url: string | null; price: number; category: string; is_available: boolean; restaurant_id: string; }
@@ -42,6 +42,7 @@ const VendorDashboard = () => {
   const [newItemDescription, setNewItemDescription] = useState("");
   const [newItemImage, setNewItemImage] = useState<File | null>(null);
   const [addingItem, setAddingItem] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
@@ -123,6 +124,22 @@ const VendorDashboard = () => {
         menuItem.id === item.id ? { ...menuItem, name: updatedName, price } : menuItem
       )));
       toast.success("Menu item updated.");
+    }
+  };
+
+  const deleteMenuItem = async (item: MenuItem) => {
+    setDeletingItemId(item.id);
+    try {
+      const { error } = await supabase.from("menu_items").delete().eq("id", item.id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      setMenu((current) => current.filter((menuItem) => menuItem.id !== item.id));
+      toast.success(`${item.name} deleted from your menu`);
+    } finally {
+      setDeletingItemId(null);
     }
   };
 
@@ -442,7 +459,19 @@ const VendorDashboard = () => {
                   <span className="text-xs text-muted-foreground">{item.is_available ? "Available" : "Sold out"}</span>
                   <Switch checked={item.is_available} onCheckedChange={() => toggleAvailable(item)} />
                 </div>
-
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Delete ${item.name}`}
+                  disabled={deletingItemId === item.id}
+                  onClick={() => deleteMenuItem(item)}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                >
+                  {deletingItemId === item.id
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Trash2 className="h-4 w-4" />}
+                </Button>
               </Card>
             ))}
           </TabsContent>

@@ -5,7 +5,9 @@ import VendorDashboard from "@/pages/VendorDashboard";
 const mocks = vi.hoisted(() => ({
   results: {} as Record<string, { data: unknown; error: { message: string } | null }>,
   updates: [] as { table: string; values: unknown; id: string }[],
+  deletes: [] as { table: string; id: string }[],
   updateError: null as { message: string } | null,
+  deleteError: null as { message: string } | null,
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }));
@@ -42,6 +44,15 @@ vi.mock("@/integrations/supabase/client", () => {
         eq: async (_column: string, id: string) => {
           mocks.updates.push({ table: this.table, values, id });
           return { error: mocks.updateError };
+        },
+      };
+    }
+
+    delete() {
+      return {
+        eq: async (_column: string, id: string) => {
+          mocks.deletes.push({ table: this.table, id });
+          return { error: mocks.deleteError };
         },
       };
     }
@@ -90,7 +101,9 @@ describe("VendorDashboard menu management", () => {
       orders: { data: [], error: null },
     };
     mocks.updates = [];
+    mocks.deletes = [];
     mocks.updateError = null;
+    mocks.deleteError = null;
     mocks.toastError.mockReset();
     mocks.toastSuccess.mockReset();
   });
@@ -145,5 +158,32 @@ describe("VendorDashboard menu management", () => {
     expect(await screen.findByText(/Menu items could not be loaded/)).toBeInTheDocument();
     expect(consoleError).toHaveBeenCalledWith("Unable to load vendor menu:", "permission denied");
     consoleError.mockRestore();
+  });
+
+  it("deletes the selected menu item", async () => {
+    render(<VendorDashboard />);
+    await screen.findByText("Test Restaurant");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Menu manager" }), { button: 0, ctrlKey: false });
+    await screen.findByRole("textbox", { name: "Name for Test Dish" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Test Dish" }));
+
+    await waitFor(() => expect(mocks.deletes).toEqual([{ table: "menu_items", id: "menu-item-id" }]));
+    expect(await screen.findByText(/No menu items have been added to this restaurant yet/)).toBeInTheDocument();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Test Dish deleted from your menu");
+  });
+
+  it("keeps the item and shows the database error when deletion is blocked", async () => {
+    mocks.deleteError = { message: "Cannot delete a menu item that is part of an accepted active order." };
+    render(<VendorDashboard />);
+    await screen.findByText("Test Restaurant");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Menu manager" }), { button: 0, ctrlKey: false });
+    await screen.findByRole("textbox", { name: "Name for Test Dish" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Test Dish" }));
+
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith(mocks.deleteError?.message));
+    expect(screen.getByRole("textbox", { name: "Name for Test Dish" })).toHaveValue("Test Dish");
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
   });
 });
